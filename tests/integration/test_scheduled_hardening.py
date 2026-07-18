@@ -173,7 +173,7 @@ def test_credential_free_validator_rejects_structurally_wrong_retry_budget(
     assert "MaximumRetryAttempts" in completed.stderr
 
 
-def test_ci_builds_in_container_and_verifies_both_built_handler_trees() -> None:
+def test_ci_builds_on_target_architecture_and_verifies_built_handlers() -> None:
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text(
         encoding="utf-8"
     )
@@ -181,7 +181,13 @@ def test_ci_builds_in_container_and_verifies_both_built_handler_trees() -> None:
     assert "AWS_DEFAULT_REGION: ap-south-1" in workflow
     assert "AWS_REGION: ap-south-1" in workflow
     assert 'SAM_CLI_TELEMETRY: "0"' in workflow
-    assert "sam build -t infra/template.yaml --use-container" in workflow
+    assert "runner: ubuntu-latest" in workflow
+    assert "runner: ubuntu-24.04-arm" in workflow
+    assert "runs-on: ${{ matrix.runner }}" in workflow
+    assert "use-installer: true" in workflow
+    assert "Verify target architecture" in workflow
+    assert "sam build -t infra/template.yaml" in workflow
+    assert "--use-container" not in workflow
     assert "python infra/scripts/verify_built_handlers.py" in workflow
     assert ".aws-sam/build/ProofLoopApiFunction" in workflow
     assert ".aws-sam/build/ProofLoopScheduledFunction" in workflow
