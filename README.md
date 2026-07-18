@@ -11,10 +11,11 @@ Python 3.13 gate, private GitHub Actions matrix on Python 3.12 and native ARM64
 Python 3.13, and local/CI SAM validation and build all pass. The Bedrock path is
 stub-client tested and SAM-packaged, but no real model or AWS resource was
 invoked. **Not deployed and not claimed production-ready.** Three accepted
-infrastructure blockers must be implemented and revalidated before a final
-CloudFormation change set is created: explicit allowed-origin injection, an
-initially disabled schedule activation control, and essential operational
-alarms.
+infrastructure blockers identified in G1.5 are implemented in Track G1.6:
+explicit allowed-origin injection, an initially disabled schedule activation
+control, and ten essential operational alarms routed to a stack-managed SNS
+topic. The changed package still requires the complete local/private-CI gate
+before any AWS preflight or non-executed change set.
 
 ## What the slice proves
 
@@ -211,18 +212,20 @@ one PAY_PER_REQUEST DynamoDB table with TTL, a five-minute EventBridge schedule,
 a query-only agent registry GSI, bounded EventBridge/Lambda retries with two SQS
 failure destinations, model-ID/ARN/region/limit parameters, a single
 model-ARN-scoped `bedrock:InvokeModel` grant for the API Lambda, and 30-day
-structured log groups. The scheduled function refreshes the model-free schema
-canary before sync; SDK retries are disabled so hidden client attempts cannot
-bypass the agent call cap. It creates no hosted dashboard, NAT Gateway,
-OpenSearch, EKS, ECS, or always-on compute.
-
-Do not use the current template for the final change set yet. Track G1.5 found
-that it does not inject the application's `PROOFLOOP_ALLOWED_ORIGIN`, defines no
-essential operational alarms, and enables the reconciliation schedule
-immediately. The approved design is to make the origin explicit, deploy the
-schedule disabled by default, define a minimal reviewed alarm set, smoke the
-backend first, and then use the dashboard locally. See
+structured log groups. It now requires an exact non-wildcard `AllowedOrigin`,
+requires an alarm-notification email, creates a stack-managed SNS topic/email
+subscription, and defines ten five-minute development alarms. The schedule is
+disabled by default and may be enabled only by a reviewed stack update after
+smoke checks. The evidence table deletes with the stack but is retained if an
+update replaces it, which trades intentional development teardown for possible
+orphan-storage cost during replacement. The scheduled function refreshes the
+model-free schema canary before sync; SDK retries are disabled so hidden client
+attempts cannot bypass the agent call cap. It creates no hosted dashboard, NAT
+Gateway, OpenSearch, EKS, ECS, or always-on compute. See
 [`codex/handovers/FINAL_AWS_EXECUTION_READINESS_REVIEW.md`](codex/handovers/FINAL_AWS_EXECUTION_READINESS_REVIEW.md).
+
+Do not create a change set until the changed template has passed the complete
+local and private Python 3.12/3.13 CI/SAM gate and G2 is separately authorized.
 
 Build/validate without creating resources:
 

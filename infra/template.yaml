@@ -8,6 +8,24 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Required application API key. Supply securely at deployment; never commit a value.
+  AllowedOrigin:
+    Type: String
+    AllowedPattern: '^https?://[^*\s]+$'
+    ConstraintDescription: Must be one explicit HTTP(S) origin without a wildcard.
+    Description: Required exact browser origin allowed by the ProofLoop API.
+  EnableReconciliationSchedule:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: Enable only through a reviewed post-smoke stack update.
+  AlarmNotificationEmail:
+    Type: String
+    NoEcho: true
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    ConstraintDescription: Must be one valid notification email address.
+    Description: Required email endpoint for development alarm notifications.
   BedrockModelId:
     Type: String
     Description: Required Bedrock model or inference-profile identifier for invoice extraction.
@@ -44,9 +62,16 @@ Parameters:
     MaxValue: 40
     Description: Per-request model timeout budget in seconds.
 
+Conditions:
+  ReconciliationScheduleEnabled: !Equals
+    - !Ref EnableReconciliationSchedule
+    - "true"
+
 Resources:
   ProofLoopEvidenceTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
     Properties:
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
@@ -113,6 +138,20 @@ Resources:
           "routeKey":"$context.routeKey","status":"$context.status",
           "responseLength":"$context.responseLength","integrationError":"$context.integrationErrorMessage"}
 
+  ProofLoopAlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Service
+          Value: ProofLoop
+
+  ProofLoopAlarmEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      Endpoint: !Ref AlarmNotificationEmail
+      TopicArn: !Ref ProofLoopAlarmTopic
+
   ProofLoopApiFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -132,6 +171,7 @@ Resources:
       Environment:
         Variables:
           PROOFLOOP_API_KEY: !Ref ApiKey
+          PROOFLOOP_ALLOWED_ORIGIN: !Ref AllowedOrigin
           PROOFLOOP_EVIDENCE_TABLE_NAME: !Ref ProofLoopEvidenceTable
           PROOFLOOP_LOG_LEVEL: INFO
           PROOFLOOP_SEED_DEMO: "false"
@@ -238,7 +278,7 @@ Resources:
           Type: Schedule
           Properties:
             Schedule: rate(5 minutes)
-            Enabled: true
+            Enabled: !If [ReconciliationScheduleEnabled, true, false]
             Input: '{"source":"proofloop.reconciliation"}'
             RetryPolicy:
               MaximumEventAgeInSeconds: 300
@@ -246,6 +286,198 @@ Resources:
             DeadLetterConfig:
               Type: SQS
               QueueLogicalId: ProofLoopScheduledDeadLetterQueue
+
+  ProofLoopApiErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ProofLoop API Lambda reported an error.
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref ProofLoopAlarmTopic
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProofLoopApiFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProofLoopApiThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ProofLoop API Lambda reported a throttle.
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref ProofLoopAlarmTopic
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProofLoopApiFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProofLoopScheduledErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ProofLoop scheduled Lambda reported an error.
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref ProofLoopAlarmTopic
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProofLoopScheduledFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProofLoopScheduledThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ProofLoop scheduled Lambda reported a throttle.
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref ProofLoopAlarmTopic
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProofLoopScheduledFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProofLoopEventBridgeDeliveryDlqDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ProofLoop EventBridge delivery DLQ has a visible message.
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref ProofLoopAlarmTopic
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ProofLoopScheduledDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProofLoopLambdaFailureDlqDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ProofLoop Lambda asynchronous failure DLQ has a visible message.
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref ProofLoopAlarmTopic
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ProofLoopScheduledFunctionEventInvokeConfigOnFailureQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProofLoopEventBridgeFailedInvocationsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ProofLoop EventBridge rule permanently failed an invocation.
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref ProofLoopAlarmTopic
+      Namespace: AWS/Events
+      MetricName: FailedInvocations
+      Dimensions:
+        - Name: RuleName
+          Value: !Ref ProofLoopScheduledFunctionFiveMinuteReconciliation
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProofLoopHttpApi5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ProofLoop HTTP API reported a server error.
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref ProofLoopAlarmTopic
+      Namespace: AWS/ApiGateway
+      MetricName: 5xx
+      Dimensions:
+        - Name: ApiId
+          Value: !Ref ProofLoopHttpApi
+        - Name: Stage
+          Value: "$default"
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProofLoopDynamoDbReadThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ProofLoop DynamoDB table reported a read throttle.
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref ProofLoopAlarmTopic
+      Namespace: AWS/DynamoDB
+      MetricName: ReadThrottleEvents
+      Dimensions:
+        - Name: TableName
+          Value: !Ref ProofLoopEvidenceTable
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProofLoopDynamoDbWriteThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ProofLoop DynamoDB table reported a write throttle.
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref ProofLoopAlarmTopic
+      Namespace: AWS/DynamoDB
+      MetricName: WriteThrottleEvents
+      Dimensions:
+        - Name: TableName
+          Value: !Ref ProofLoopEvidenceTable
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
 
 Outputs:
   HttpApiUrl:

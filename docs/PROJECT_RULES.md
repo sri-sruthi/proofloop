@@ -48,7 +48,11 @@ Permanent promises:
 
 Code existence is not production readiness. A feature may be called production-ready only after its applicable contracts, authentication/authorization, concurrency, failure behavior, privacy/retention, observability, cost limits, rollback/recovery, and unit/property/contract/integration/failure-injection tests have been implemented and verified in the target environment. This foundation is a verified domain slice, not a claim that the complete platform is production-ready.
 
-The supported local package range is Python `>=3.12,<3.14`. The foundation is locally verified on Python 3.12.7. Python 3.13 is the intended later AWS Lambda runtime but remains unverified until CI or a local 3.13 environment executes the complete checks.
+The supported local package range is Python `>=3.12,<3.14`. The release
+baseline is verified locally on CPython 3.13.7 and in strictly private GitHub
+Actions on Python 3.12 and native ARM64 Python 3.13. The SAM package also builds
+and imports both handlers on the target runtime/architecture. These are
+packaging and CI facts, not AWS deployment or production-readiness evidence.
 
 ## Customer decision record for the frozen corrections
 

@@ -36,6 +36,81 @@ LOG_GROUPS = (
     "ProofLoopScheduledLogGroup",
     "ProofLoopHttpApiAccessLogGroup",
 )
+ALARM_SPECS: dict[
+    str,
+    tuple[str, str, str, tuple[tuple[str, str], ...]],
+] = {
+    "ProofLoopApiErrorsAlarm": (
+        "AWS/Lambda",
+        "Errors",
+        "Sum",
+        (("FunctionName", "!Ref ProofLoopApiFunction"),),
+    ),
+    "ProofLoopApiThrottlesAlarm": (
+        "AWS/Lambda",
+        "Throttles",
+        "Sum",
+        (("FunctionName", "!Ref ProofLoopApiFunction"),),
+    ),
+    "ProofLoopScheduledErrorsAlarm": (
+        "AWS/Lambda",
+        "Errors",
+        "Sum",
+        (("FunctionName", "!Ref ProofLoopScheduledFunction"),),
+    ),
+    "ProofLoopScheduledThrottlesAlarm": (
+        "AWS/Lambda",
+        "Throttles",
+        "Sum",
+        (("FunctionName", "!Ref ProofLoopScheduledFunction"),),
+    ),
+    "ProofLoopEventBridgeDeliveryDlqDepthAlarm": (
+        "AWS/SQS",
+        "ApproximateNumberOfMessagesVisible",
+        "Maximum",
+        (("QueueName", "!GetAtt ProofLoopScheduledDeadLetterQueue.QueueName"),),
+    ),
+    "ProofLoopLambdaFailureDlqDepthAlarm": (
+        "AWS/SQS",
+        "ApproximateNumberOfMessagesVisible",
+        "Maximum",
+        (
+            (
+                "QueueName",
+                "!GetAtt ProofLoopScheduledFunctionEventInvokeConfigOnFailureQueue.QueueName",
+            ),
+        ),
+    ),
+    "ProofLoopEventBridgeFailedInvocationsAlarm": (
+        "AWS/Events",
+        "FailedInvocations",
+        "Sum",
+        (
+            (
+                "RuleName",
+                "!Ref ProofLoopScheduledFunctionFiveMinuteReconciliation",
+            ),
+        ),
+    ),
+    "ProofLoopHttpApi5xxAlarm": (
+        "AWS/ApiGateway",
+        "5xx",
+        "Sum",
+        (("ApiId", "!Ref ProofLoopHttpApi"), ("Stage", '"$default"')),
+    ),
+    "ProofLoopDynamoDbReadThrottlesAlarm": (
+        "AWS/DynamoDB",
+        "ReadThrottleEvents",
+        "Sum",
+        (("TableName", "!Ref ProofLoopEvidenceTable"),),
+    ),
+    "ProofLoopDynamoDbWriteThrottlesAlarm": (
+        "AWS/DynamoDB",
+        "WriteThrottleEvents",
+        "Sum",
+        (("TableName", "!Ref ProofLoopEvidenceTable"),),
+    ),
+}
 
 
 def _indent(line: str) -> int:
@@ -111,6 +186,74 @@ def _validate_parameters(lines: Sequence[str], issues: list[str]) -> None:
     _expect_value(api_key, "NoEcho", 4, "true", issues, "ApiKey")
     if _direct_values(api_key, "Default", 4):
         issues.append("ApiKey must not define a default")
+    allowed_origin = _find_block(lines, "AllowedOrigin", 2, issues)
+    _expect_value(allowed_origin, "Type", 4, "String", issues, "AllowedOrigin")
+    _expect_value(
+        allowed_origin,
+        "AllowedPattern",
+        4,
+        "'^https?://[^*\\s]+$'",
+        issues,
+        "AllowedOrigin",
+    )
+    if _direct_values(allowed_origin, "Default", 4):
+        issues.append("AllowedOrigin must not define a default")
+    schedule_enabled = _find_block(
+        lines, "EnableReconciliationSchedule", 2, issues
+    )
+    _expect_value(
+        schedule_enabled,
+        "Type",
+        4,
+        "String",
+        issues,
+        "EnableReconciliationSchedule",
+    )
+    _expect_value(
+        schedule_enabled,
+        "Default",
+        4,
+        '"false"',
+        issues,
+        "EnableReconciliationSchedule",
+    )
+    _expect_sequence(
+        schedule_enabled,
+        (
+            "    AllowedValues:",
+            '      - "true"',
+            '      - "false"',
+        ),
+        issues,
+        "EnableReconciliationSchedule must allow only true and false",
+    )
+    alarm_email = _find_block(lines, "AlarmNotificationEmail", 2, issues)
+    _expect_value(
+        alarm_email,
+        "Type",
+        4,
+        "String",
+        issues,
+        "AlarmNotificationEmail",
+    )
+    _expect_value(
+        alarm_email,
+        "NoEcho",
+        4,
+        "true",
+        issues,
+        "AlarmNotificationEmail",
+    )
+    _expect_value(
+        alarm_email,
+        "AllowedPattern",
+        4,
+        "'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$'",
+        issues,
+        "AlarmNotificationEmail",
+    )
+    if _direct_values(alarm_email, "Default", 4):
+        issues.append("AlarmNotificationEmail must not define a default")
     for name in ("BedrockModelId", "BedrockModelArn", "BedrockRegion"):
         parameter = _find_block(lines, name, 2, issues)
         _expect_value(parameter, "Type", 4, "String", issues, name)
@@ -133,6 +276,22 @@ def _validate_table(lines: Sequence[str], issues: list[str]) -> None:
         "Type",
         4,
         "AWS::DynamoDB::Table",
+        issues,
+        "ProofLoopEvidenceTable",
+    )
+    _expect_value(
+        table,
+        "DeletionPolicy",
+        4,
+        "Delete",
+        issues,
+        "ProofLoopEvidenceTable",
+    )
+    _expect_value(
+        table,
+        "UpdateReplacePolicy",
+        4,
+        "Retain",
         issues,
         "ProofLoopEvidenceTable",
     )
@@ -202,6 +361,14 @@ def _validate_functions(lines: Sequence[str], issues: list[str]) -> None:
             issues.append(f"{logical_id} IAM actions must not use wildcards")
 
     api_function = _find_block(lines, "ProofLoopApiFunction", 2, issues=[])
+    _expect_value(
+        api_function,
+        "PROOFLOOP_ALLOWED_ORIGIN",
+        10,
+        "!Ref AllowedOrigin",
+        issues,
+        "ProofLoopApiFunction",
+    )
     if "                - dynamodb:Scan" in api_function:
         issues.append("ProofLoopApiFunction must not have dynamodb:Scan")
     scheduled = _find_block(lines, "ProofLoopScheduledFunction", 2, issues=[])
@@ -274,7 +441,14 @@ def _validate_schedule(lines: Sequence[str], issues: list[str]) -> None:
         issues,
         "FiveMinuteReconciliation",
     )
-    _expect_value(event, "Enabled", 12, "true", issues, "FiveMinuteReconciliation")
+    _expect_value(
+        event,
+        "Enabled",
+        12,
+        "!If [ReconciliationScheduleEnabled, true, false]",
+        issues,
+        "FiveMinuteReconciliation",
+    )
     retry = _find_block(event, "RetryPolicy", 12, issues)
     _expect_value(
         retry,
@@ -325,6 +499,101 @@ def _validate_log_groups(lines: Sequence[str], issues: list[str]) -> None:
         _expect_value(log_group, "RetentionInDays", 6, "30", issues, logical_id)
 
 
+def _validate_schedule_condition(lines: Sequence[str], issues: list[str]) -> None:
+    _expect_sequence(
+        lines,
+        (
+            "  ReconciliationScheduleEnabled: !Equals",
+            "    - !Ref EnableReconciliationSchedule",
+            '    - "true"',
+        ),
+        issues,
+        "ReconciliationScheduleEnabled must compare the activation parameter to true",
+    )
+
+
+def _validate_notifications_and_alarms(
+    lines: Sequence[str],
+    issues: list[str],
+) -> None:
+    topic = _find_block(lines, "ProofLoopAlarmTopic", 2, issues)
+    _expect_value(
+        topic,
+        "Type",
+        4,
+        "AWS::SNS::Topic",
+        issues,
+        "ProofLoopAlarmTopic",
+    )
+    subscription = _find_block(
+        lines, "ProofLoopAlarmEmailSubscription", 2, issues
+    )
+    _expect_value(
+        subscription,
+        "Type",
+        4,
+        "AWS::SNS::Subscription",
+        issues,
+        "ProofLoopAlarmEmailSubscription",
+    )
+    for key, expected in (
+        ("Protocol", "email"),
+        ("Endpoint", "!Ref AlarmNotificationEmail"),
+        ("TopicArn", "!Ref ProofLoopAlarmTopic"),
+    ):
+        _expect_value(
+            subscription,
+            key,
+            6,
+            expected,
+            issues,
+            "ProofLoopAlarmEmailSubscription",
+        )
+
+    resources = _find_block(lines, "Resources", 0, issues=[])
+    alarm_type = "    Type: AWS::CloudWatch::Alarm"
+    if resources.count(alarm_type) != len(ALARM_SPECS):
+        issues.append(f"template requires exactly {len(ALARM_SPECS)} alarms")
+
+    for logical_id, (namespace, metric, statistic, dimensions) in ALARM_SPECS.items():
+        alarm = _find_block(lines, logical_id, 2, issues)
+        _expect_value(
+            alarm,
+            "Type",
+            4,
+            "AWS::CloudWatch::Alarm",
+            issues,
+            logical_id,
+        )
+        for key, expected in (
+            ("ActionsEnabled", "true"),
+            ("Namespace", namespace),
+            ("MetricName", metric),
+            ("Statistic", statistic),
+            ("Period", "300"),
+            ("EvaluationPeriods", "1"),
+            ("Threshold", "1"),
+            ("ComparisonOperator", "GreaterThanOrEqualToThreshold"),
+            ("TreatMissingData", "notBreaching"),
+        ):
+            _expect_value(alarm, key, 6, expected, issues, logical_id)
+        actions = _find_block(alarm, "AlarmActions", 6, issues)
+        _expect_sequence(
+            actions,
+            ("      AlarmActions:", "        - !Ref ProofLoopAlarmTopic"),
+            issues,
+            f"{logical_id}.AlarmActions must use ProofLoopAlarmTopic",
+        )
+        alarm_dimensions = _find_block(alarm, "Dimensions", 6, issues)
+        for name, value in dimensions:
+            _expect_sequence(
+                alarm_dimensions,
+                (f"        - Name: {name}", f"          Value: {value}"),
+                issues,
+                f"{logical_id}.Dimensions must include {name}={value}",
+            )
+
+
 def _validate_resource_budget(lines: Sequence[str], issues: list[str]) -> None:
     resources = _find_block(lines, "Resources", 0, issues)
     for line in resources:
@@ -347,10 +616,12 @@ def validate_template(path: Path) -> list[str]:
         "template",
     )
     _validate_parameters(lines, issues)
+    _validate_schedule_condition(lines, issues)
     _validate_table(lines, issues)
     _validate_functions(lines, issues)
     _validate_schedule(lines, issues)
     _validate_log_groups(lines, issues)
+    _validate_notifications_and_alarms(lines, issues)
     _validate_resource_budget(lines, issues)
     return issues
 

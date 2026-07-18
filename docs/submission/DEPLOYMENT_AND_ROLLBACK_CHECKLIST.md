@@ -1,14 +1,15 @@
 # ProofLoop Post-Activation Deployment and Rollback Checklist
 
-**Status:** offline-reviewed through Track G1.5 and deliberately **not
-executed**. Python 3.13, SAM, the strictly private Git baseline, and private
-Python 3.12/3.13 CI pass; infrastructure hardening remains required before the
-final non-executed change set.  
+**Status:** G1.5 is offline-reviewed and the approved G1.6 infrastructure
+hardening is implemented locally but deliberately **not executed**. Python
+3.13, SAM, the strictly private Git baseline, and the carried-forward private
+Python 3.12/3.13 CI pass; the changed G1.6 commit still requires its complete
+private CI gate before the final non-executed change set.  
 **Account fact:** payment verification is complete and Lambda is accessible in
 `ap-south-1`, as stated by the product owner; no Track G1.5 AWS call verified
 the account or region.  
-**Trigger order:** approve and complete G1.6 infrastructure hardening and its
-private CI gate; then separately authorize G2 read-only AWS preflight and one
+**Trigger order:** complete the G1.6 local/private CI gate; then separately
+authorize G2 read-only AWS preflight and one
 non-executed change set. Execution and real-model smoke require later, distinct
 approval.  
 **Rule:** a checked box requires captured evidence; do not infer success from
@@ -30,13 +31,13 @@ Record these in the release ticket before any command runs.
 - [ ] **Secure API-key owner:** `________________`; generates a high-entropy key,
   delivers it through the approved secret channel, and confirms it never enters
   Git, `samconfig.toml`, logs, screenshots, tickets, or shell history.
-- [ ] **Browser origin:** exact allowed origin: `________________`. Recommended
-  controlled-demo default: `http://localhost:8000`; use no wildcard. A hosted
+- [x] **Browser origin:** `http://localhost:8000` is approved for the controlled
+  demo and implemented as a required parameter; use no wildcard. A hosted
   dashboard requires its separately approved HTTPS origin.
-- [ ] **Dashboard strategy:** `no hosting for backend smoke / local dashboard
-  after smoke / privately hosted`: `________________`. Recommended: first two
-  in that order; no hosted dashboard resource in the initial stack.
-- [ ] **Initial schedule state:** `DISABLED` is explicitly approved. Enabling
+- [x] **Dashboard strategy:** no hosting for backend smoke, then the existing
+  local dashboard. No hosted dashboard resource belongs in the initial stack.
+- [x] **Initial schedule state:** `DISABLED` is explicitly approved and is the
+  parameter default. Enabling
   later requires a reviewed stack update after every smoke/owner gate passes.
 - [ ] **Tenant ID:** `________________`.
 - [ ] **Environment:** `DEVELOPMENT`, `STAGING`, or approved alternative:
@@ -44,24 +45,25 @@ Record these in the release ticket before any command runs.
 - [ ] **Assurance-boundary ID:** `________________`.
 - [ ] **Monthly budget and thresholds:** amount `________`; notification
   recipients `________________`; anomaly and hard-stop policy `________________`.
-- [ ] **CloudWatch/log owner:** `________________`; 30-day retention accepted or
-  changed through an approved template update.
-- [ ] **Essential alarm defaults:** proposed one-event/message-in-five-minutes
-  defaults, missing data non-breaching, are accepted or replaced with approved
-  values: `________________`.
-- [ ] **Alarm notification strategy:** approved existing topic ARN, explicitly
-  approved stack-managed topic/endpoint, and notification owner:
-  `________________`. A no-action alarm can support offline/change-set review
-  but does not clear execution.
+- [x] **CloudWatch/log policy:** 30-day retention is approved. The product owner
+  is the initial development responder; operational evidence still needs the
+  deploy-time identity and confirmation below.
+- [x] **Essential alarm defaults:** period 300 seconds, one evaluation period,
+  threshold at least one event/message, and missing data non-breaching are
+  approved and implemented.
+- [x] **Alarm notification design:** stack-managed SNS topic plus a required
+  email-subscription parameter is approved and implemented. No address is
+  committed. **Execution remains blocked** until the product owner securely
+  supplies the address and confirms the subscription.
 - [ ] **EventBridge delivery DLQ owner:** `________________`.
 - [ ] **Lambda on-failure DLQ owner:** `________________`.
 - [ ] **DLQ inspection/replay runbook:** approved location `________________`.
 - [ ] **Rollback authority:** `________________`; may disable schedule, roll back
   code/config, export required evidence, or delete the stack.
-- [ ] **DynamoDB deletion/replacement policy:** `________________`. Recommended
-  for guaranteed synthetic disposable development data: explicit delete on
-  stack removal plus retain on replacement; otherwise approve retain behavior
-  and a billable-orphan cleanup owner.
+- [x] **DynamoDB deletion/replacement policy:** `DeletionPolicy: Delete` and
+  `UpdateReplacePolicy: Retain` are approved and implemented for controlled
+  development. Stack deletion loses current-table data; replacement retains a
+  potentially billable orphan that needs a named cleanup decision.
 - [x] **Private GitHub baseline:** `sri-sruthi/proofloop-aivar-private` was
   conclusively verified `PRIVATE`; F2 author/visibility evidence is recorded.
 - [x] **Private CI gate:** run `29640732187` passed Python 3.12 and native ARM64
@@ -89,18 +91,17 @@ Record these in the release ticket before any command runs.
   and private Python 3.12/3.13 CI completed with captured evidence. The failed
   local Docker attempt is not claimed; target ARM64 evidence comes from the
   successful native ARM64 Linux CI job.
-- [ ] **ORIGIN-01:** using TDD, add an explicit required `AllowedOrigin`
+- [x] **ORIGIN-01:** TDD adds an explicit required `AllowedOrigin`
   deployment parameter and inject `PROOFLOOP_ALLOWED_ORIGIN` into the API
   Lambda. Approve the exact value; do not rely on the application's invisible
   localhost fallback and do not use `*`.
-- [ ] **SCHEDULE-01:** using TDD, add an explicit activation parameter with the
+- [x] **SCHEDULE-01:** TDD adds an explicit activation parameter with the
   reconciliation schedule disabled by default. The initial change set must show
   it disabled.
-- [ ] **ALARMS-01:** using TDD, define the approved essential development alarm
-  set as infrastructure as code and adopt an explicit notification strategy.
-  Do not invent thresholds, topic ARNs, endpoints, or owners.
-- [ ] **DATA-POLICY-01:** approve and, if included in G1.6 authorization,
-  implement explicit DynamoDB deletion and replacement behavior.
+- [x] **ALARMS-01:** TDD defines the approved ten-alarm development set, a
+  stack-managed SNS topic, and a required deploy-time email subscription.
+- [x] **DATA-POLICY-01:** TDD verifies explicit delete-on-stack-removal and
+  retain-on-replacement table behavior.
 - [ ] The complete local and private Python 3.12/3.13 CI/SAM gate passes again
   after G1.6; no AWS preflight or change-set creation begins before it does.
 
@@ -129,10 +130,11 @@ aws bedrock list-foundation-models --region "$PROOFLOOP_BEDROCK_REGION"
 
 ## 4. Reproduce the clean local gate
 
-Track F2 already passed this gate in a disposable CPython 3.13.7 environment
-with pytest 9.1.1 and 266 tests. The commands below must be rerun after G1.6;
-their boxes remain open for that changed template rather than overstating the
-carried-forward result.
+Track F2 passed this gate with 266 tests. Track G1.6 reran it in a clean
+project-only CPython 3.13.7 environment with pytest 9.1.1 and 277 tests; strict
+audit reports no known project/tooling vulnerabilities in that environment.
+SAM CLI remains separately isolated because version 1.163.0 pins Click 8.1.8,
+which the current audit index flags as `PYSEC-2026-2132`.
 
 ```bash
 python3.13 -m venv /tmp/proofloop-predeploy-venv
@@ -152,16 +154,18 @@ python infra/scripts/validate_template.py
 node --check dashboard/app.js
 ```
 
-- [ ] Python 3.13 is used, not 3.12 compatibility evidence.
-- [ ] Every command exits zero; exact versions and counts are attached.
-- [ ] Import-isolation, secret and dangerous-code scans pass.
-- [ ] Only approved files differ from the reviewed baseline.
+- [x] Python 3.13.7 is used, not 3.12 compatibility evidence.
+- [x] Every application command exits zero; exact versions and counts are
+  recorded in the G1.6 handoff.
+- [x] Import-isolation, secret and dangerous-code scans pass.
+- [x] Only approved Codex-owned infrastructure/tests/docs/CI files differ from
+  the G1.6 branch baseline.
 
 ## 5. SAM validation and target build
 
-Track F2 carried forward: SAM CLI 1.163.0 validated and built locally, both
-built handlers imported, and the native ARM64 Python 3.13 Linux CI job repeated
-the build/import successfully. Rerun this section after G1.6.
+Track G1.6 used isolated SAM CLI 1.163.0: strict transformed-template lint
+passed, a native CPython 3.13.7 ARM64 build succeeded, and both handlers imported
+from the fresh artifacts. The changed private Linux CI result remains pending.
 
 Install/use an approved SAM CLI without changing global software unexpectedly,
 then run from the repository root:
@@ -174,14 +178,15 @@ python infra/scripts/verify_built_handlers.py \
   .aws-sam/build/ProofLoopScheduledFunction proofloop.infrastructure.scheduled_handler:scheduled_handler
 ```
 
-- [ ] Offline `sam validate` succeeds with the approved region configuration and
+- [x] Offline `sam validate --lint` succeeds with the approved region
+  configuration and
   makes no AWS call.
-- [ ] Native ARM64 Linux build targets Python 3.13 and installs runtime
-  dependencies only. A local container build is optional evidence, not a
-  substitute for the passing native target-architecture job.
-- [ ] Both handlers and imported ProofLoop modules resolve from their build
+- [x] Native local ARM64 build targets Python 3.13 and installs runtime
+  dependencies only. A container build is optional evidence; the changed Linux
+  target-architecture CI result remains pending.
+- [x] Both handlers and imported ProofLoop modules resolve from their build
   artifacts, not the editable source tree.
-- [ ] Built artifacts contain no `.env`, API key, credentials, raw invoice,
+- [x] Built artifacts contain no `.env`, API key, credentials, raw invoice,
   test cache or development toolchain.
 - [ ] The reviewed change set from `sam deploy --no-execute-changeset` or an
   equivalent preview contains only expected resources and IAM permissions.
@@ -190,14 +195,14 @@ python infra/scripts/verify_built_handlers.py \
 
 - [ ] AWS Budget exists with the approved monthly amount and alert thresholds.
 - [ ] Cost Anomaly Detection or equivalent alerting is routed to the owner.
-- [ ] The final reviewed template defines the essential controlled-development
+- [x] The final reviewed template defines the essential controlled-development
   alarms for API Lambda errors/throttles, scheduled Lambda errors/throttles,
   both SQS DLQ visible-message depths, EventBridge failed invocations, HTTP API
   5xx, and DynamoDB read/write throttling.
-- [ ] Product-owner-approved thresholds, evaluation periods, missing-data
-  behavior, notification destination, and named responder replace any design
-  placeholders. The G1.5 proposal is one event/message in five minutes with
-  missing data non-breaching; it is not approved merely because it is written.
+- [x] Product-owner-approved thresholds, evaluation periods, and missing-data
+  behavior are implemented: one event/message in five minutes and missing data
+  non-breaching. The stack-managed topic and parameterized email contain no
+  invented destination; deploy-time address supply and confirmation remain open.
 - [ ] Alert notifications are tested through an approved synthetic signal.
 - [ ] Dashboard and runbook links are attached to each alarm.
 - [ ] Log fields are reviewed to exclude keys, bodies, evidence payloads, scope
@@ -210,17 +215,18 @@ development deployment. They are not substitutes for the essential set.
 
 ## 7. Guarded deployment
 
-**No executable deployment command is approved here.** The current template
-does not yet contain the required origin, schedule-activation, and alarm
-contracts. Track G1.6 must implement and document their exact verified parameter
-names; Track G2 may then create one non-executed change set. Only a later
+**No executable deployment command is approved here.** The template now
+contains `AllowedOrigin`, `EnableReconciliationSchedule`, and
+`AlarmNotificationEmail` plus the approved alarms/topic/table policies. Track
+G2 may create one non-executed change set only after the G1.6 private CI gate is
+green and G2 is separately authorized. Only a later
 execution authorization may publish the exact reviewed deploy command.
 
 Create/export future parameter values through the approved secure process. The
 API key must not be typed into a committed file or captured transcript. The
 eventual command must include the approved API key, Bedrock model/profile and
 ARN, Bedrock region, exact allowed origin, schedule disabled value, and approved
-alarm-action parameters.
+alarm email parameter.
 
 - [ ] Human approver reviews the final CloudFormation change set.
 - [ ] The change set shows the exact approved `AllowedOrigin` value and API

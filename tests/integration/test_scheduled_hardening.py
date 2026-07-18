@@ -185,6 +185,7 @@ def test_ci_builds_on_target_architecture_and_verifies_built_handlers() -> None:
     assert "runner: ubuntu-24.04-arm" in workflow
     assert "runs-on: ${{ matrix.runner }}" in workflow
     assert "use-installer: true" in workflow
+    assert "sam validate --lint --template-file infra/template.yaml" in workflow
     assert "Verify target architecture" in workflow
     assert "sam build -t infra/template.yaml" in workflow
     assert "--use-container" not in workflow

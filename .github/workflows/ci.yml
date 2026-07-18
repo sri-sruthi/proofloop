@@ -45,7 +45,7 @@ jobs:
       - name: Validate SAM package guardrails
         run: |
           python infra/scripts/validate_template.py
-          sam validate --template-file infra/template.yaml
+          sam validate --lint --template-file infra/template.yaml
       - name: Verify target architecture
         if: matrix.python-version == '3.13'
         run: python -c "import platform; assert platform.machine() == 'aarch64', platform.machine()"

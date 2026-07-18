@@ -2,9 +2,10 @@
 
 This package deploys only pay-per-use infrastructure: an ARM64 Python 3.13 HTTP
 Lambda, a separate five-minute reconciliation Lambda, one HTTP API, one DynamoDB
-on-demand table, EventBridge scheduling, two SQS failure queues, and 30-day
-CloudWatch log groups. It does **not** provision a NAT Gateway, OpenSearch, EKS,
-ECS, databases with fixed
+on-demand table, EventBridge scheduling disabled by default, two SQS failure
+queues, 30-day CloudWatch log groups, ten standard metric alarms, and one
+stack-managed SNS topic with an email subscription. It does **not** provision a
+hosted dashboard, NAT Gateway, OpenSearch, EKS, ECS, databases with fixed
 capacity, or any other always-on compute.
 
 ## Data and access boundaries
@@ -86,13 +87,53 @@ age and two retries:
 Both queues are standard, request-priced SQS resources with no always-on
 consumer. The template intentionally does not auto-redrive them: an operator
 must inspect customer-safe failure metadata, correct the cause, and explicitly
-replay. A production deployment still needs alarms, an owner/runbook, and a
-verified replay procedure for both queue depths.
+replay. The development template now alarms on both queue depths, but execution
+still needs a confirmed notification subscription, named owner/runbook, and a
+verified replay procedure.
 
 `ApiKey` is a `NoEcho` CloudFormation parameter injected as
 `PROOFLOOP_API_KEY`. It has no default and must be supplied securely at deploy
 time. Do not place its value in this repository, `samconfig.toml`, logs, or shell
-history.
+history. This API-key check is a controlled development/demo boundary, not
+customer-production identity, IAM authorization, or a substitute for key
+rotation and per-principal access control.
+
+`AllowedOrigin` is also required and has no default. It is injected as
+`PROOFLOOP_ALLOWED_ORIGIN`; the parameter constraint permits one explicit
+HTTP(S) origin and rejects `*`. The approved controlled-demo value is
+`http://localhost:8000`. The SAM stack hosts no dashboard: deploy and smoke the
+backend first, then serve the existing dashboard locally.
+
+`EnableReconciliationSchedule` accepts only `true` or `false` and defaults to
+`false`. Keep it false for the first deployment. Enabling it starts recurring
+Lambda, DynamoDB, EventBridge, log, and possible failure-path operations, so it
+requires a separately reviewed stack update after health, authentication,
+persistence, canary, DLQ, alarm-notification, and rollback smoke checks pass.
+
+## Development monitoring and cost boundary
+
+The template defines ten essential standard-resolution alarms: API and
+scheduled Lambda errors/throttles, both visible-message DLQ depths, EventBridge
+failed invocations, HTTP API 5xx, and DynamoDB read/write throttles. Each uses a
+300-second period, one evaluation period, threshold 1, and missing data as
+non-breaching. Every alarm publishes to `ProofLoopAlarmTopic`; the required
+`AlarmNotificationEmail` parameter creates an email subscription that the
+product owner must confirm before execution. Do not treat an unconfirmed
+subscription as operational coverage.
+
+The Lambdas, HTTP API, on-demand table/GSI, EventBridge rule, SQS queues, SNS
+requests/delivery, log ingestion/storage, and SAM artifact storage are usage-
+priced. The ten alarms accrue alarm metric-hours while they exist even when the
+schedule is disabled; account-wide free-tier availability must not be assumed.
+There is no hosted-dashboard or always-on-compute charge. Bedrock is a separate
+token-priced path and remains unauthorized until a later explicit smoke decision.
+
+The evidence table uses `DeletionPolicy: Delete` and
+`UpdateReplacePolicy: Retain`. Stack deletion therefore deletes the controlled
+development table and its data; export any required evidence before teardown.
+If an update replaces the table, CloudFormation retains the old table to reduce
+accidental replacement loss, but the orphan continues to incur storage/usage
+cost until a named owner reviews and deletes it.
 
 ## Invoice agent and Bedrock boundary
 
@@ -129,16 +170,18 @@ Run these commands from the repository root. They do not create AWS resources.
 
 ```bash
 python3 infra/scripts/validate_template.py
-sam validate --template-file infra/template.yaml
-sam build -t infra/template.yaml --use-container
+sam validate --lint --template-file infra/template.yaml
+PYTHON="$(command -v python3.13)" sam build -t infra/template.yaml
 python infra/scripts/verify_built_handlers.py \
   .aws-sam/build/ProofLoopApiFunction proofloop.infrastructure.lambda_handler:handler \
   .aws-sam/build/ProofLoopScheduledFunction proofloop.infrastructure.scheduled_handler:scheduled_handler
 ```
 
-`--use-container` is intentional: the only declared runtime dependency is built
-for the target Python 3.13 Lambda runtime rather than the developer's host
-Python. A root `Makefile` includes the custom `infra/lambda/Makefile`; the
+The native build must resolve `python3.13`; passing `PYTHON` prevents a host
+Python 3.12 from producing an ABI-incompatible native wheel. Target Linux ARM64
+evidence comes from the private native ARM64 Python 3.13 CI job; a container
+build is optional local evidence and is not claimed here. A root `Makefile`
+includes the custom `infra/lambda/Makefile`; the
 repository-root build context makes `pyproject.toml` and `src/proofloop`
 available after SAM isolates the source. The custom Makefile copies the package and installs
 only `[project].dependencies`; it never installs the development toolchain. The
@@ -150,27 +193,38 @@ installation.
 ## Deploy and remove
 
 Deployment creates billable AWS resources and requires explicit authorization.
-After authorization, export the API key only in the current shell and use:
+The following is a future parameter example, not authorization to deploy.
+After separate authorization, place secret values in the approved ephemeral
+channel, ensure the command is not captured in shell history, and use the
+reviewed equivalents of:
 
 ```bash
 sam deploy --guided --template-file .aws-sam/build/template.yaml \
   --stack-name proofloop-dev --capabilities CAPABILITY_IAM \
   --parameter-overrides \
     "ApiKey=$PROOFLOOP_API_KEY" \
+    "AllowedOrigin=http://localhost:8000" \
+    "EnableReconciliationSchedule=false" \
+    "AlarmNotificationEmail=$PROOFLOOP_ALARM_EMAIL" \
     "BedrockModelId=$PROOFLOOP_BEDROCK_MODEL_ID" \
     "BedrockModelArn=$PROOFLOOP_BEDROCK_MODEL_ARN" \
     "BedrockRegion=$PROOFLOOP_BEDROCK_REGION"
 ```
 
-The first guided deployment can also choose the S3 artifact bucket. Confirm the
-prompted changes before accepting them. To remove the stack and stop charges:
+The email value is supplied only at deployment and is never committed; the
+product owner is the initial development responder and must confirm the SNS
+subscription. The first guided deployment can also choose the S3 artifact
+bucket. Confirm the schedule is disabled and inspect every prompted change
+before accepting it. To remove the stack and stop most stack charges:
 
 ```bash
 sam delete --stack-name proofloop-dev
 ```
 
-Deletion removes the evidence table, failure queues, and log groups, so export
-any records needed for audit retention before running it.
+Deletion removes the current evidence table, failure queues, alarms, topic, and
+log groups, so export any records needed for audit retention before running it.
+A table retained by an earlier replacement is not removed with the current
+stack and needs a separately reviewed cleanup to stop its orphan cost.
 
 ## Guarded real-provider smoke
 
