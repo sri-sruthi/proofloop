@@ -1,0 +1,265 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  ProofLoop's budget-conscious, serverless runtime evidence assurance slice.
+
+Parameters:
+  ApiKey:
+    Type: String
+    NoEcho: true
+    Description: Required application API key. Supply securely at deployment; never commit a value.
+  BedrockModelId:
+    Type: String
+    Description: Required Bedrock model or inference-profile identifier for invoice extraction.
+  BedrockModelArn:
+    Type: String
+    AllowedPattern: "^arn:[A-Za-z0-9-]+:bedrock:[A-Za-z0-9-]*:[0-9]*:.+$"
+    Description: Exact model or inference-profile ARN allowed by the API Lambda role.
+  BedrockRegion:
+    Type: String
+    AllowedPattern: "^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$"
+    Description: AWS region used to construct the injected Bedrock Runtime client.
+  MaxModelCalls:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 10
+    Description: Hard maximum structured model calls per invoice run.
+  MaxModelRetries:
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 9
+    Description: Maximum model retries, still bounded by MaxModelCalls.
+  MaxOutputTokens:
+    Type: Number
+    Default: 2000
+    MinValue: 1
+    MaxValue: 2000
+    Description: Hard maximum generated tokens requested per model call.
+  ModelTimeoutSeconds:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    MaxValue: 40
+    Description: Per-request model timeout budget in seconds.
+
+Resources:
+  ProofLoopEvidenceTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: AgentRegistryIndex
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Service
+          Value: ProofLoop
+        - Key: DataClass
+          Value: EvidenceMetadata
+
+  ProofLoopApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-proofloop-api"
+      RetentionInDays: 30
+
+  ProofLoopScheduledLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-proofloop-reconciliation"
+      RetentionInDays: 30
+
+  ProofLoopHttpApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/${AWS::StackName}-proofloop"
+      RetentionInDays: 30
+
+  ProofLoopHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      AccessLogSettings:
+        DestinationArn: !GetAtt ProofLoopHttpApiAccessLogGroup.Arn
+        Format: >-
+          {"requestId":"$context.requestId","ip":"$context.identity.sourceIp",
+          "requestTime":"$context.requestTime","httpMethod":"$context.httpMethod",
+          "routeKey":"$context.routeKey","status":"$context.status",
+          "responseLength":"$context.responseLength","integrationError":"$context.integrationErrorMessage"}
+
+  ProofLoopApiFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    DependsOn:
+      - ProofLoopApiLogGroup
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-proofloop-api"
+      CodeUri: ../
+      Handler: proofloop.infrastructure.lambda_handler.handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+      MemorySize: 256
+      Timeout: 45
+      ReservedConcurrentExecutions: 5
+      Environment:
+        Variables:
+          PROOFLOOP_API_KEY: !Ref ApiKey
+          PROOFLOOP_EVIDENCE_TABLE_NAME: !Ref ProofLoopEvidenceTable
+          PROOFLOOP_LOG_LEVEL: INFO
+          PROOFLOOP_SEED_DEMO: "false"
+          PROOFLOOP_MODEL_PROVIDER: bedrock
+          PROOFLOOP_BEDROCK_MODEL_ID: !Ref BedrockModelId
+          PROOFLOOP_BEDROCK_REGION: !Ref BedrockRegion
+          PROOFLOOP_MODEL_VERSION: !Ref BedrockModelId
+          PROOFLOOP_MAX_MODEL_CALLS: !Ref MaxModelCalls
+          PROOFLOOP_MAX_RETRIES: !Ref MaxModelRetries
+          PROOFLOOP_MAX_OUTPUT_TOKENS: !Ref MaxOutputTokens
+          PROOFLOOP_MODEL_TIMEOUT_SECONDS: !Ref ModelTimeoutSeconds
+          PROOFLOOP_SEED_SAFE_CANARY: "true"
+          PROOFLOOP_DEMO_ENVIRONMENT: DEVELOPMENT
+          PROOFLOOP_DEMO_BOUNDARY_ID: proofloop-demo-development-invoices
+          POWERTOOLS_SERVICE_NAME: proofloop-api
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: WARN
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+                - dynamodb:TransactWriteItems
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ProofLoopEvidenceTable.Arn
+            - Effect: Allow
+              Action:
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !Sub "${ProofLoopApiLogGroup.Arn}:*"
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: !Ref BedrockModelArn
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ProofLoopHttpApi
+            Path: /{proxy+}
+            Method: ANY
+
+  ProofLoopScheduledFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    DependsOn:
+      - ProofLoopScheduledLogGroup
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-proofloop-reconciliation"
+      CodeUri: ../
+      Handler: proofloop.infrastructure.scheduled_handler.scheduled_handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+      MemorySize: 256
+      Timeout: 30
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          PROOFLOOP_EVIDENCE_TABLE_NAME: !Ref ProofLoopEvidenceTable
+          PROOFLOOP_LOG_LEVEL: INFO
+          PROOFLOOP_SEED_DEMO: "false"
+          PROOFLOOP_MODEL_VERSION: !Ref BedrockModelId
+          PROOFLOOP_SEED_SAFE_CANARY: "true"
+          PROOFLOOP_DEMO_ENVIRONMENT: DEVELOPMENT
+          PROOFLOOP_DEMO_BOUNDARY_ID: proofloop-demo-development-invoices
+          POWERTOOLS_SERVICE_NAME: proofloop-reconciliation
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: WARN
+      EventInvokeConfig:
+        MaximumEventAgeInSeconds: 300
+        MaximumRetryAttempts: 2
+        DestinationConfig:
+          OnFailure:
+            Type: SQS
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+                - dynamodb:TransactWriteItems
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ProofLoopEvidenceTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !Sub "${ProofLoopEvidenceTable.Arn}/index/AgentRegistryIndex"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !Sub "${ProofLoopScheduledLogGroup.Arn}:*"
+      Events:
+        FiveMinuteReconciliation:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+            Enabled: true
+            Input: '{"source":"proofloop.reconciliation"}'
+            RetryPolicy:
+              MaximumEventAgeInSeconds: 300
+              MaximumRetryAttempts: 2
+            DeadLetterConfig:
+              Type: SQS
+              QueueLogicalId: ProofLoopScheduledDeadLetterQueue
+
+Outputs:
+  HttpApiUrl:
+    Description: ProofLoop HTTP API base URL.
+    Value: !Sub "https://${ProofLoopHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/"
+  EvidenceTableName:
+    Description: DynamoDB evidence table name.
+    Value: !Ref ProofLoopEvidenceTable
+  EvidenceTableArn:
+    Description: DynamoDB evidence table ARN.
+    Value: !GetAtt ProofLoopEvidenceTable.Arn
+  ApiLogGroupName:
+    Description: API Lambda CloudWatch log group name.
+    Value: !Ref ProofLoopApiLogGroup
+  ScheduledLogGroupName:
+    Description: Scheduled Lambda CloudWatch log group name.
+    Value: !Ref ProofLoopScheduledLogGroup

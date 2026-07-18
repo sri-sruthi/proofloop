@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="ProofLoop runtime compliance assurance dashboard" />
+    <title>ProofLoop · Assurance desk</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to assurance data</a>
+    <header class="topbar">
+      <div class="wordmark" aria-label="ProofLoop Assurance Desk">
+        <span class="wordmark-mark" aria-hidden="true"></span>
+        <span>ProofLoop</span><small>ASSURANCE DESK</small>
+      </div>
+      <div class="desk-meta" id="last-updated" aria-live="polite">Not connected</div>
+    </header>
+
+    <main id="main-content" class="shell">
+      <section class="context-panel" aria-labelledby="connection-heading">
+        <div class="section-heading">
+          <p class="eyebrow">Live read model</p>
+          <h1 id="connection-heading">Runtime assurance, with the evidence attached.</h1>
+          <p>Connect this desk to a ProofLoop API to inspect one agent boundary at a time.</p>
+        </div>
+        <form id="connection-form" class="connection-form" novalidate>
+          <label>
+            <span>API base URL</span>
+            <input id="api-base" name="apiBase" type="url" inputmode="url" value="http://localhost:8080" required />
+          </label>
+          <label>
+            <span>API key</span>
+            <input id="api-key" name="apiKey" type="password" autocomplete="off" required placeholder="Enter for this browser session" />
+          </label>
+          <label>
+            <span>Agent ID</span>
+            <input id="agent-id" name="agentId" value="invoice-agent" required />
+          </label>
+          <label>
+            <span>Tenant ID</span>
+            <input id="tenant-id" name="tenantId" value="proofloop-demo" required />
+          </label>
+          <label>
+            <span>Environment</span>
+            <select id="environment" name="environment">
+              <option value="LOCAL">LOCAL</option>
+              <option value="DEVELOPMENT">DEVELOPMENT</option>
+              <option value="TEST">TEST</option>
+              <option value="STAGING">STAGING</option>
+              <option value="PRODUCTION">PRODUCTION</option>
+            </select>
+          </label>
+          <label>
+            <span>Assurance boundary</span>
+            <input id="boundary-id" name="boundaryId" value="proofloop-demo-local-invoices" required />
+          </label>
+          <div class="form-actions">
+            <button id="connect-button" type="submit">Load assurance record</button>
+            <button id="clear-key-button" class="quiet-button" type="button">Clear saved key</button>
+          </div>
+          <p class="form-note">The key is held only in this tab’s session storage and is sent as <code>X-API-Key</code>.</p>
+        </form>
+      </section>
+
+      <section id="message-region" class="message-region" aria-live="assertive" aria-atomic="true"></section>
+
+      <section id="dashboard" class="dashboard" hidden aria-label="Assurance details">
+        <article class="status-hero" aria-labelledby="status-label">
+          <div class="status-rail" aria-hidden="true"></div>
+          <div>
+            <p class="eyebrow">Current assurance state</p>
+            <div class="status-line">
+              <h2 id="status-label" data-status>—</h2>
+              <span id="freshness-chip" class="freshness-chip">Evidence unassessed</span>
+            </div>
+            <p id="status-summary" class="status-summary">Load a compliance record to assess evidence.</p>
+          </div>
+          <dl class="identity-grid">
+            <div><dt>Agent</dt><dd id="identity-agent">—</dd></div>
+            <div><dt>Tenant</dt><dd id="identity-tenant">—</dd></div>
+            <div><dt>Environment</dt><dd id="identity-environment">—</dd></div>
+            <div><dt>Assurance boundary</dt><dd id="identity-boundary">—</dd></div>
+          </dl>
+        </article>
+
+        <div class="overview-grid">
+          <section class="panel controls-panel" aria-labelledby="controls-heading">
+            <div class="panel-heading"><p class="eyebrow">Required controls</p><h2 id="controls-heading">Control execution</h2></div>
+            <ul id="control-list" class="control-list" aria-live="polite"></ul>
+          </section>
+          <section class="panel action-panel" aria-labelledby="action-heading">
+            <div class="panel-heading"><p class="eyebrow">Operator guidance</p><h2 id="action-heading">Next safe action</h2></div>
+            <p id="next-safe-action" class="next-action">—</p>
+            <dl class="evidence-facts">
+              <div><dt>Evaluated</dt><dd id="evaluated-at">—</dd></div>
+              <div><dt>Last violation</dt><dd id="last-violation">None reported</dd></div>
+            </dl>
+          </section>
+        </div>
+
+        <div class="detail-grid">
+          <section class="panel references-panel" aria-labelledby="references-heading">
+            <div class="panel-heading"><p class="eyebrow">Why this state</p><h2 id="references-heading">Reasons &amp; evidence</h2></div>
+            <div class="reference-columns">
+              <div><h3>Reason codes</h3><ul id="reason-list" class="token-list"></ul></div>
+              <div><h3>Evidence references</h3><ul id="evidence-list" class="token-list evidence-list"></ul></div>
+            </div>
+          </section>
+          <section class="panel incidents-panel" aria-labelledby="incidents-heading">
+            <div class="panel-heading"><p class="eyebrow">Service level</p><h2 id="incidents-heading">Incidents</h2></div>
+            <div id="incident-list" class="incident-list" aria-live="polite"></div>
+          </section>
+        </div>
+
+        <section class="panel timeline-panel" aria-labelledby="timeline-heading">
+          <div class="panel-heading"><p class="eyebrow">Last seven days</p><h2 id="timeline-heading">Assurance transition log</h2></div>
+          <ol id="timeline-list" class="timeline-list" aria-live="polite"></ol>
+        </section>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
