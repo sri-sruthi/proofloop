@@ -2,7 +2,8 @@
 
 *A sequenced path to walk in able to explain and defend the solution — beginner
 framing first, then depth, then the honest edges. Read in this order. Everything
-here is already true of the repo as of 2026-07-18 (266 tests pass locally).*
+here is already true of the repo as of 2026-07-18 (277 tests pass locally after
+Codex G1.6 infrastructure hardening; mypy clean on 89 files).*
 
 ---
 
@@ -57,9 +58,15 @@ Read these five files and be ready to whiteboard the flow between them:
 10. **`claude/reviews/FINAL_SUBMISSION_AUDIT.md`** (this track) — the traceability
     table, the **SC2 fidelity note** (silent→AMBER, explicit failure→RED), and the
     production-readiness scoring gap.
-11. **`codex/handovers/FINAL_PREDEPLOYMENT_RELEASE_GATE.md`** — the blocker map and
-    what is *not* done (Python 3.13, SAM build, CI, AWS, real Bedrock). *(Note: this
-    doc is stale on counts — see audit F-2; trust MANUAL_QA_EVIDENCE for numbers.)*
+11. **`codex/handovers/FINAL_CI_AND_SAM_GATE.md`** and
+    **`codex/handovers/FINAL_PREDEPLOYMENT_RELEASE_GATE.md`** — the F2 evidence and
+    the blocker map. What is now **done**: a private Git baseline, GitHub CI green on
+    Python 3.12 (x64) and native ARM64 Python 3.13, SAM validate/build, and both
+    built-handler imports. What is still **not** done: AWS deployment and a real
+    Bedrock call. (Both docs record the F2 gate at 266 tests; Codex G1.6 — see
+    **`codex/handovers/FINAL_G1_6_INFRASTRUCTURE_HARDENING.md`** — has since added
+    alarms/SNS/origin/schedule hardening and the suite is now 277 tests, CI run
+    `29649766982` green on both matrix jobs.)
 
 ---
 
@@ -81,10 +88,16 @@ Read these five files and be ready to whiteboard the flow between them:
   we can't *confirm* failure from absence. A real failure signal, our synthetic
   canary at hour 48, drives RED, and sustained AMBER opens an SLA incident. That's
   'no unsupported green, and no unsupported red.'"
-- **"Is it production-ready?"** → "No, and I won't claim it. It's a locally verified
-  slice — 266 tests, deterministic, privacy-safe. AWS deployment, real Bedrock, and
-  the Python-3.13/SAM/CI gate are the documented next steps. The assignment rewards
-  deployment and a real LLM; that's my honest gap and my roadmap closes it."
+- **"Is it production-ready?"** → "No, and I won't claim it — but the engineering
+  gate is strong. 277 tests pass on a private-repo CI matrix across Python 3.12 (x64)
+  and native ARM64 Python 3.13; Ruff, Bandit, a strict dependency audit, mypy, and
+  SAM validate/build all pass, both Lambda handlers import from the built
+  artifacts, and the template now carries ten CloudWatch alarms, an SNS topic, a
+  required non-wildcard origin, and a default-disabled schedule. What's left is
+  exactly the cloud edge: an actual AWS deployment and a
+  real Bedrock call, which are gated on a separately reviewed change set. The
+  assignment rewards deployment and a real LLM; that's my honest remaining gap and
+  the path to close it is defined."
 
 ## Do-not-overclaim list (say these boundaries out loud in the video)
 

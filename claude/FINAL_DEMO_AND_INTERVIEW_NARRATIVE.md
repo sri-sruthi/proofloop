@@ -1,9 +1,13 @@
 # ProofLoop PS-6.2 — Final Demo & Interview Narrative
 
 *Aligned with the **integrated** state (Codex Track C): agent → requirement-bound
-evidence → deterministic compliance. Verified 2026-07-18: 266 tests pass, mypy
-clean (88 files). Not deployed, no real Bedrock call, not production-ready, no MCP
-runtime.*
+evidence → deterministic compliance. Verified 2026-07-18: 277 tests pass, mypy
+clean (89 files), after Codex G1.6 infrastructure hardening (alarms/SNS/origin/
+default-disabled schedule). The code/packaging gate is green in a **private-repo CI matrix**
+across Python 3.12 (x64) and native **ARM64 Python 3.13**, with Ruff, Bandit, a
+strict dependency audit, and **SAM validate/build + both built-handler imports**
+passing. Still **not deployed, no real Bedrock call, not production-ready, no MCP
+runtime.***
 
 ---
 
@@ -198,9 +202,12 @@ trusts green because green means *proven-now*, not *configured-once*.
 - **"How is this not just a dashboard?"** Dashboards report configuration; ProofLoop
   binds each proof to one requirement and one exact execution and refuses green
   without fresh matching evidence.
-- **"What's not done?"** No deploy/real-model/accuracy/latency/cost evidence; bounded
-  regex DLP; in-memory tools/no MCP runtime; API-key demo auth; contract-tested
-  DynamoDB/SAM; no caller run-key on the invoice endpoint yet. Stated up front.
+- **"What's not done?"** No AWS deployment and no real Bedrock call yet — hence no
+  accuracy/latency/cost evidence from a live model or live DynamoDB/EventBridge.
+  (What *is* done: private-repo CI on Python 3.12 + native ARM64 3.13, SAM
+  validate/build, and both built-handler imports.) Other honest limits: bounded
+  regex DLP; in-memory tools / no MCP runtime; API-key demo auth; no caller run-key
+  on the invoice endpoint yet. Stated up front.
 - **"Where's the data science?"** Calibration, threshold trade-offs, evaluation
   design, and continuous validation — all fenced out of the deterministic verdict (see
   §5).

@@ -122,6 +122,10 @@ boundary, the two-agent rationale), and be ready to whiteboard the evidence flow
   README and my E1 addendum (**266 / pytest 9.1.1 / blockers closed / AWS
   activated**). Either update it or (preferred) **exclude it from the ZIP** as an
   internal handoff (see ZIP allowlist). Owner: Codex.
+  **→ RESOLVED (F3 update, 2026-07-18):** Codex reconciled
+  `FINAL_PREDEPLOYMENT_RELEASE_GATE.md` to 266 / pytest 9.1.1 / all local blockers
+  PASS, and added `FINAL_CI_AND_SAM_GATE.md`. The reviewer-facing set is now
+  internally consistent. (Still exclude both internal handoffs from the ZIP.)
 - **F-3 (observation, not a defect).** PS-6.2 SC2 fidelity note (§2) — deliberate
   AMBER-for-silence design; ensure the write-up and video state it explicitly so an
   evaluator does not read it as a missed "red within 48h."
@@ -133,22 +137,40 @@ pytest -q                              -> 266 passed in 1.42s
 focused contract tests (7 files)       -> 37 passed
 pytest --version                       -> 7.4.4 (my base env; project pins >=9.0.3,<10)
 ```
-**Not reproducible in this env (attested by Codex's disposable CI-like env, not by
-me):** Ruff 0.15.22, Bandit 1.9.4, pytest 9.1.1, strict dependency audit. Ruff and
-Bandit are not installed in this Anaconda base and I did not install software, so I
-make no first-hand green claim for them — only that the two repaired findings
+**Not reproducible in this env (Anaconda base):** Ruff, Bandit, pytest 9.1.1,
+strict dependency audit — Ruff/Bandit are not installed here and I did not install
+software, so I make no *first-hand* green claim for them; the two repaired findings
 (RUFF-01, BANDIT-01) are correct-by-construction and the code they touch passes
 pytest/mypy/compileall here.
 
-## 7. Unresolved blockers (exact)
+**→ F3 update (2026-07-18): now backed by authoritative CI evidence.** Codex's
+Track F2 provides a green **private-repo GitHub Actions matrix** — Python 3.12
+(x64) and native **ARM64 Python 3.13** (run `29640732187`, both `success`) — with
+Ruff, Bandit, strict dependency audit, mypy (88 files), 266 tests, and **SAM
+validate/build + both built-handler imports** all passing on the target
+architecture. This is stronger than any single local environment and supersedes
+the "not reproducible locally" caveat above for verification purposes.
+Codex G1.6 (infrastructure hardening) has since landed on main: the suite is now
+**277 tests / mypy 89 files**, and CI run `29649766982` is green on both matrix
+jobs (see `codex/handovers/FINAL_G1_6_INFRASTRUCTURE_HARDENING.md`). Still no AWS
+call, change set, deployment, or Bedrock request.
 
-- **AWS deployment / real Bedrock:** NOT executed. AWS Free account is now activated
-  (`ap-south-1` Lambda opens), but deployment, live DynamoDB/EventBridge/Lambda, and
-  a real Bedrock call remain gated on explicit authorization + reviewed change set.
-- **Python 3.13 / SAM build / GitHub CI:** NOT run locally (tools unavailable).
-- **F-1, F-2:** open, Codex/candidate-owned (above).
-- **Production-readiness scoring gap:** the assignment rewards deployment + real
-  LLM; current slice is local + stub. Acknowledge, don't overclaim.
+## 7. Unresolved blockers (exact) — updated F3 (2026-07-18)
+
+**Closed since F1 (Track F2 evidence):**
+- **Python 3.13 / SAM build / GitHub CI** — now PASS. Private-repo CI matrix green on
+  Python 3.12 (x64) + native ARM64 Python 3.13; SAM validate/build and both
+  built-handler imports pass. (REPO-01/TARGET-01/SAM-01/CI-01 closed.)
+- **F-2** — resolved (release-gate doc reconciled; see §5).
+
+**Still unresolved:**
+- **AWS deployment / real Bedrock:** NOT executed. Account activation is attested by
+  the product owner (`ap-south-1`), but no AWS API call, CloudFormation change set,
+  live DynamoDB/EventBridge/Lambda, or Bedrock request exists — all gated on explicit
+  authorization + a separately reviewed change set.
+- **F-1:** open (video should lead with the demo), candidate/Codex-owned.
+- **Production-readiness scoring gap:** the assignment rewards a *deployed* solution
+  and a *real* LLM; the current slice is local + stub. Acknowledge, don't overclaim.
 
 ## 8. Files written by Track F1
 
@@ -162,9 +184,9 @@ modified; no deploy/AWS/Bedrock/Git action performed.
 
 ## 9. Handoff to Codex (genuine items only)
 
-1. **F-2:** reconcile or exclude `FINAL_PREDEPLOYMENT_RELEASE_GATE.md`
-   (263→266, 8.4.2→9.1.1, blockers→closed, AWS→activated) so the reviewer-facing
-   set is internally consistent.
+1. **F-2:** ~~reconcile or exclude `FINAL_PREDEPLOYMENT_RELEASE_GATE.md`~~ **DONE
+   (F3, 2026-07-18)** — reconciled to 266 / pytest 9.1.1 / blockers PASS; still
+   exclude internal handoffs from the ZIP.
 2. **F-1:** adjust `DEMO_RUNBOOK.md` so the recorded video leads with the demo.
 3. **F-3:** ensure the write-up (§6) states the deliberate "silent→AMBER, explicit
    failure→RED" reading against SC2's literal "red within 48h."
