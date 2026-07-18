@@ -6,10 +6,15 @@ evidence into an agent compliance record, while refusing to show GREEN unless
 every required control has fresh, correlated PASS evidence.
 
 **Current status (2026-07-18):** domain, application spine, corrected invoice
-agents, and the agent-to-assurance integration are implemented and locally tested
-on Python 3.12.7. The Bedrock path is stub-client tested and SAM-packaged but no
-real model or AWS resource was invoked. **Not deployed and not claimed
-production-ready.** Python 3.13 is covered by CI but was unavailable locally.
+agents, and the agent-to-assurance integration are implemented. The clean local
+Python 3.13 gate, private GitHub Actions matrix on Python 3.12 and native ARM64
+Python 3.13, and local/CI SAM validation and build all pass. The Bedrock path is
+stub-client tested and SAM-packaged, but no real model or AWS resource was
+invoked. **Not deployed and not claimed production-ready.** Three accepted
+infrastructure blockers must be implemented and revalidated before a final
+CloudFormation change set is created: explicit allowed-origin injection, an
+initially disabled schedule activation control, and essential operational
+alarms.
 
 ## What the slice proves
 
@@ -190,28 +195,41 @@ python infra/scripts/validate_template.py
 node --check dashboard/app.js
 ```
 
-Ruff, Bandit, pip-audit, Python 3.13, `sam validate`, a containerized `sam build`,
-and built-handler import verification run in `.github/workflows/ci.yml`. They
-are not claimed as locally executed when their tools/runtimes are unavailable.
+Track F2 evidence records CPython 3.13.7 and pytest 9.1.1 locally with 266 tests,
+plus mypy, Ruff, Bandit, strict dependency audit, compile/import, both demos,
+template validation and dashboard syntax passing. Private GitHub Actions run
+`29640732187` passed on Python 3.12.13 and native ARM64 Python 3.13.14. SAM CLI
+1.163.0 validated and built both Lambda artifacts locally and on the ARM64
+Linux job, and both built handlers imported successfully. The attempted local
+Docker build is not claimed as passing; the native ARM64 CI build provides the
+target-architecture packaging evidence.
 
 ## AWS SAM package
 
-The SAM template creates two ARM64 Python 3.13 Lambdas, one HTTP API, one
-PAY_PER_REQUEST DynamoDB table with TTL, a five-minute EventBridge schedule, and
-query-only agent registry GSI, bounded EventBridge/Lambda retries with SQS
+The current SAM template packages two ARM64 Python 3.13 Lambdas, one HTTP API,
+one PAY_PER_REQUEST DynamoDB table with TTL, a five-minute EventBridge schedule,
+a query-only agent registry GSI, bounded EventBridge/Lambda retries with two SQS
 failure destinations, model-ID/ARN/region/limit parameters, a single
 model-ARN-scoped `bedrock:InvokeModel` grant for the API Lambda, and 30-day
 structured log groups. The scheduled function refreshes the model-free schema
-canary every five minutes before sync; SDK retries are disabled so hidden client
-attempts cannot bypass the agent call cap. It creates no NAT
-Gateway, OpenSearch, EKS, ECS, or always-on compute.
+canary before sync; SDK retries are disabled so hidden client attempts cannot
+bypass the agent call cap. It creates no hosted dashboard, NAT Gateway,
+OpenSearch, EKS, ECS, or always-on compute.
+
+Do not use the current template for the final change set yet. Track G1.5 found
+that it does not inject the application's `PROOFLOOP_ALLOWED_ORIGIN`, defines no
+essential operational alarms, and enables the reconciliation schedule
+immediately. The approved design is to make the origin explicit, deploy the
+schedule disabled by default, define a minimal reviewed alarm set, smoke the
+backend first, and then use the dashboard locally. See
+[`codex/handovers/FINAL_AWS_EXECUTION_READINESS_REVIEW.md`](codex/handovers/FINAL_AWS_EXECUTION_READINESS_REVIEW.md).
 
 Build/validate without creating resources:
 
 ```bash
 python infra/scripts/validate_template.py
 sam validate --template-file infra/template.yaml
-sam build -t infra/template.yaml --use-container
+sam build -t infra/template.yaml
 ```
 
 Deployment and deletion commands are documented in
@@ -221,7 +239,8 @@ owner explicitly authorizes DEPLOY.**
 ## Important limitations
 
 - API-key authentication is intentionally minimal and is not a replacement for
-  production identity/authorization, rotation, throttling, or per-role policy.
+  production IAM, identity/authorization, rotation, throttling, or per-role
+  policy. It is a controlled development/demo boundary only.
 - DynamoDB behavior is contract-tested with a deterministic transactional table
   fake; evidence/idempotency and compliance/timeline/incident mutations use
   optimistic transactions. A per-agent monotonic aggregate revision orders
@@ -232,7 +251,9 @@ owner explicitly authorizes DEPLOY.**
   Per-agent reconciliation still reads that agent's retained eight-day evidence
   prefix, so production needs quotas/backpressure and load-tested volume limits.
 - The local WSGI server is for demonstration, not production traffic.
-- The dashboard is static and does not mutate compliance state.
+- The dashboard is static, does not mutate compliance state, and is not hosted
+  by the SAM stack. The controlled deployment plan uses no hosted dashboard for
+  backend smoke and then serves it locally for the assignment demo.
 - No raw or redacted invoice, prompt, model output, tool payload, observation
   reason, PII finding, or PII count is persisted or returned; evidence retains
   opaque references and approved booleans only.

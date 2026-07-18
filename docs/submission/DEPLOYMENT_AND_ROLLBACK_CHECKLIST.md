@@ -1,10 +1,16 @@
 # ProofLoop Post-Activation Deployment and Rollback Checklist
 
-**Status:** planned, exact, and deliberately **not executed** through Track E2.  
+**Status:** offline-reviewed through Track G1.5 and deliberately **not
+executed**. Python 3.13, SAM, the strictly private Git baseline, and private
+Python 3.12/3.13 CI pass; infrastructure hardening remains required before the
+final non-executed change set.  
 **Account fact:** payment verification is complete and Lambda is accessible in
-`ap-south-1`, as stated by the product owner; Track E2 made no AWS call.  
-**Trigger:** the product owner separately authorizes the exact cloud resources,
-change set and bounded real-model smoke after the remaining gates pass.  
+`ap-south-1`, as stated by the product owner; no Track G1.5 AWS call verified
+the account or region.  
+**Trigger order:** approve and complete G1.6 infrastructure hardening and its
+private CI gate; then separately authorize G2 read-only AWS preflight and one
+non-executed change set. Execution and real-model smoke require later, distinct
+approval.  
 **Rule:** a checked box requires captured evidence; do not infer success from
 template or workflow-file presence.
 
@@ -24,8 +30,14 @@ Record these in the release ticket before any command runs.
 - [ ] **Secure API-key owner:** `________________`; generates a high-entropy key,
   delivers it through the approved secret channel, and confirms it never enters
   Git, `samconfig.toml`, logs, screenshots, tickets, or shell history.
-- [ ] **Browser origin:** exact HTTPS dashboard origin for CORS:
-  `________________`.
+- [ ] **Browser origin:** exact allowed origin: `________________`. Recommended
+  controlled-demo default: `http://localhost:8000`; use no wildcard. A hosted
+  dashboard requires its separately approved HTTPS origin.
+- [ ] **Dashboard strategy:** `no hosting for backend smoke / local dashboard
+  after smoke / privately hosted`: `________________`. Recommended: first two
+  in that order; no hosted dashboard resource in the initial stack.
+- [ ] **Initial schedule state:** `DISABLED` is explicitly approved. Enabling
+  later requires a reviewed stack update after every smoke/owner gate passes.
 - [ ] **Tenant ID:** `________________`.
 - [ ] **Environment:** `DEVELOPMENT`, `STAGING`, or approved alternative:
   `________________`.
@@ -34,18 +46,31 @@ Record these in the release ticket before any command runs.
   recipients `________________`; anomaly and hard-stop policy `________________`.
 - [ ] **CloudWatch/log owner:** `________________`; 30-day retention accepted or
   changed through an approved template update.
+- [ ] **Essential alarm defaults:** proposed one-event/message-in-five-minutes
+  defaults, missing data non-breaching, are accepted or replaced with approved
+  values: `________________`.
+- [ ] **Alarm notification strategy:** approved existing topic ARN, explicitly
+  approved stack-managed topic/endpoint, and notification owner:
+  `________________`. A no-action alarm can support offline/change-set review
+  but does not clear execution.
 - [ ] **EventBridge delivery DLQ owner:** `________________`.
 - [ ] **Lambda on-failure DLQ owner:** `________________`.
 - [ ] **DLQ inspection/replay runbook:** approved location `________________`.
 - [ ] **Rollback authority:** `________________`; may disable schedule, roll back
   code/config, export required evidence, or delete the stack.
-- [ ] **Private GitHub authorization:** owner/repository name, visibility,
-  branch protections and allowed collaborators recorded; no repository creation
-  before approval.
-- [ ] **CI authorization:** secrets/OIDC approach, protected environments,
-  required checks and deploy approvers recorded.
+- [ ] **DynamoDB deletion/replacement policy:** `________________`. Recommended
+  for guaranteed synthetic disposable development data: explicit delete on
+  stack removal plus retain on replacement; otherwise approve retain behavior
+  and a billable-orphan cleanup owner.
+- [x] **Private GitHub baseline:** `sri-sruthi/proofloop-aivar-private` was
+  conclusively verified `PRIVATE`; F2 author/visibility evidence is recorded.
+- [x] **Private CI gate:** run `29640732187` passed Python 3.12 and native ARM64
+  Python 3.13 without deployment credentials.
+- [ ] **Future deploy authorization:** secrets/OIDC approach, protected
+  environment, required checks, deploy approvers, and allowed collaborators are
+  recorded before any execution workflow exists.
 
-## 2. Local blockers and remaining predeployment prerequisites
+## 2. Closed local gates and required G1.6 hardening
 
 - [x] RUFF-01: authorized owners removed the unused agent import and replaced
   the two assigned infrastructure lambdas with typed named functions; exact CI
@@ -56,16 +81,37 @@ Record these in the release ticket before any command runs.
 - [x] AUDIT-01: pytest 9 compatibility passed; the dev policy is
   `pytest>=9.0.3,<10`; strict audit reports no known vulnerabilities in the
   clean disposable environment after its bootstrap pip was upgraded.
-- [x] Claude's independent audit was received and triaged; Track E2 did not
-  implement optional O1/O2 or cross the agent ownership boundary.
-- [ ] A baseline commit/private remote exists so the review diff is auditable.
-- [ ] Python 3.13, SAM validation/container build, built-handler verification
-  and protected CI complete with captured evidence.
+- [x] The independent agent/privacy audit was received and triaged; optional
+  O1/O2 were not implemented and the ownership boundary was preserved.
+- [x] A user-authored baseline and conclusively private remote exist; the review
+  history is auditable.
+- [x] Local Python 3.13, SAM validation/native build, built-handler verification,
+  and private Python 3.12/3.13 CI completed with captured evidence. The failed
+  local Docker attempt is not claimed; target ARM64 evidence comes from the
+  successful native ARM64 Linux CI job.
+- [ ] **ORIGIN-01:** using TDD, add an explicit required `AllowedOrigin`
+  deployment parameter and inject `PROOFLOOP_ALLOWED_ORIGIN` into the API
+  Lambda. Approve the exact value; do not rely on the application's invisible
+  localhost fallback and do not use `*`.
+- [ ] **SCHEDULE-01:** using TDD, add an explicit activation parameter with the
+  reconciliation schedule disabled by default. The initial change set must show
+  it disabled.
+- [ ] **ALARMS-01:** using TDD, define the approved essential development alarm
+  set as infrastructure as code and adopt an explicit notification strategy.
+  Do not invent thresholds, topic ARNs, endpoints, or owners.
+- [ ] **DATA-POLICY-01:** approve and, if included in G1.6 authorization,
+  implement explicit DynamoDB deletion and replacement behavior.
+- [ ] The complete local and private Python 3.12/3.13 CI/SAM gate passes again
+  after G1.6; no AWS preflight or change-set creation begins before it does.
+
+Detailed design and classification:
+`codex/handovers/FINAL_AWS_EXECUTION_READINESS_REVIEW.md`.
 
 ## 3. Read-only account and model preflight
 
-These commands contact AWS but do not create resources. Run only after account
-explicit preflight authorization.
+These commands contact AWS but do not create resources. Run only in separately
+authorized Track G2, after G1.6 is committed to the private repository and its
+complete CI/SAM gate passes.
 
 ```bash
 aws sts get-caller-identity
@@ -82,6 +128,11 @@ aws bedrock list-foundation-models --region "$PROOFLOOP_BEDROCK_REGION"
 - [ ] No long-lived AWS secret is exported or recorded.
 
 ## 4. Reproduce the clean local gate
+
+Track F2 already passed this gate in a disposable CPython 3.13.7 environment
+with pytest 9.1.1 and 266 tests. The commands below must be rerun after G1.6;
+their boxes remain open for that changed template rather than overstating the
+carried-forward result.
 
 ```bash
 python3.13 -m venv /tmp/proofloop-predeploy-venv
@@ -108,20 +159,26 @@ node --check dashboard/app.js
 
 ## 5. SAM validation and target build
 
+Track F2 carried forward: SAM CLI 1.163.0 validated and built locally, both
+built handlers imported, and the native ARM64 Python 3.13 Linux CI job repeated
+the build/import successfully. Rerun this section after G1.6.
+
 Install/use an approved SAM CLI without changing global software unexpectedly,
 then run from the repository root:
 
 ```bash
 sam validate --template-file infra/template.yaml
-sam build -t infra/template.yaml --use-container
+sam build -t infra/template.yaml
 python infra/scripts/verify_built_handlers.py \
   .aws-sam/build/ProofLoopApiFunction proofloop.infrastructure.lambda_handler:handler \
   .aws-sam/build/ProofLoopScheduledFunction proofloop.infrastructure.scheduled_handler:scheduled_handler
 ```
 
-- [ ] `sam validate` succeeds against the target account/region.
-- [ ] Container build targets ARM64 Python 3.13 and installs runtime dependencies
-  only.
+- [ ] Offline `sam validate` succeeds with the approved region configuration and
+  makes no AWS call.
+- [ ] Native ARM64 Linux build targets Python 3.13 and installs runtime
+  dependencies only. A local container build is optional evidence, not a
+  substitute for the passing native target-architecture job.
 - [ ] Both handlers and imported ProofLoop modules resolve from their build
   artifacts, not the editable source tree.
 - [ ] Built artifacts contain no `.env`, API key, credentials, raw invoice,
@@ -133,32 +190,45 @@ python infra/scripts/verify_built_handlers.py \
 
 - [ ] AWS Budget exists with the approved monthly amount and alert thresholds.
 - [ ] Cost Anomaly Detection or equivalent alerting is routed to the owner.
-- [ ] Alarms exist for API and scheduled Lambda errors, duration, throttles and
-  concurrency; API 4xx/5xx; DynamoDB throttles/capacity; both SQS DLQ depths; and
-  EventBridge failed invocations.
+- [ ] The final reviewed template defines the essential controlled-development
+  alarms for API Lambda errors/throttles, scheduled Lambda errors/throttles,
+  both SQS DLQ visible-message depths, EventBridge failed invocations, HTTP API
+  5xx, and DynamoDB read/write throttling.
+- [ ] Product-owner-approved thresholds, evaluation periods, missing-data
+  behavior, notification destination, and named responder replace any design
+  placeholders. The G1.5 proposal is one event/message in five minutes with
+  missing data non-breaching; it is not approved merely because it is written.
 - [ ] Alert notifications are tested through an approved synthetic signal.
 - [ ] Dashboard and runbook links are attached to each alarm.
 - [ ] Log fields are reviewed to exclude keys, bodies, evidence payloads, scope
   identifiers and exception text beyond the customer-safe schema.
 
+Production-scale extensions—duration/latency, concurrency headroom, API 4xx
+rate, capacity trends, DLQ age, anomaly/composite alarms, privacy log filters,
+SLO dashboards, and load-derived thresholds—may defer beyond the controlled
+development deployment. They are not substitutes for the essential set.
+
 ## 7. Guarded deployment
 
-Create/export parameter values through the approved secure process. The API key
-must not be typed into a committed file or captured transcript.
+**No executable deployment command is approved here.** The current template
+does not yet contain the required origin, schedule-activation, and alarm
+contracts. Track G1.6 must implement and document their exact verified parameter
+names; Track G2 may then create one non-executed change set. Only a later
+execution authorization may publish the exact reviewed deploy command.
 
-```bash
-sam deploy --guided --template-file .aws-sam/build/template.yaml \
-  --stack-name "$PROOFLOOP_STACK_NAME" \
-  --region "$PROOFLOOP_BEDROCK_REGION" \
-  --capabilities CAPABILITY_IAM \
-  --parameter-overrides \
-    "ApiKey=$PROOFLOOP_API_KEY" \
-    "BedrockModelId=$PROOFLOOP_BEDROCK_MODEL_ID" \
-    "BedrockModelArn=$PROOFLOOP_BEDROCK_MODEL_ARN" \
-    "BedrockRegion=$PROOFLOOP_BEDROCK_REGION"
-```
+Create/export future parameter values through the approved secure process. The
+API key must not be typed into a committed file or captured transcript. The
+eventual command must include the approved API key, Bedrock model/profile and
+ARN, Bedrock region, exact allowed origin, schedule disabled value, and approved
+alarm-action parameters.
 
 - [ ] Human approver reviews the final CloudFormation change set.
+- [ ] The change set shows the exact approved `AllowedOrigin` value and API
+  Lambda environment injection.
+- [ ] The change set shows the reconciliation schedule disabled for the first
+  deployment.
+- [ ] The change set shows only the approved essential alarms and notification
+  actions; no invented destination or unexpected monitoring resource appears.
 - [ ] Stack reaches `CREATE_COMPLETE`/`UPDATE_COMPLETE` without rollback.
 - [ ] Outputs and physical resource IDs are captured without secrets.
 - [ ] DynamoDB is on demand, encrypted and TTL-enabled with
@@ -168,8 +238,10 @@ sam deploy --guided --template-file .aws-sam/build/template.yaml \
 - [ ] Scheduled Lambda has no Bedrock permission and only index `Query`, not
   table `Scan`.
 - [ ] Two distinct SQS failure queues and bounded retry/event-age policies exist.
-- [ ] EventBridge runs every five minutes; leave it disabled until smoke
-  ownership is ready if the approved rollout plan requires that.
+- [ ] EventBridge rule exists but remains disabled throughout initial smoke.
+- [ ] No hosted dashboard resource or unexpected public artifact is present.
+- [ ] DynamoDB deletion and replacement behavior matches the approved data
+  policy and rollback plan.
 - [ ] Log groups have the approved retention and no unexpected payload data.
 
 ## 8. Post-deploy smoke sequence
@@ -182,7 +254,27 @@ never request bodies, prompts, model output or secrets.
 3. [ ] Invalid and oversized requests return stable safe 400 errors.
 4. [ ] Run the fake-model-equivalent deterministic application checks against
    the deployed read model where the deployment supports them.
-5. [ ] With separate explicit authorization, run the guarded real-provider smoke:
+5. [ ] Confirm the independent model-free canary and expected GREEN/AMBER/RED
+   derivation without enabling the schedule.
+6. [ ] Inspect DynamoDB and logs for metadata-only persistence and safe logs.
+7. [ ] Verify both DLQ paths, both queue-depth alarms, and the controlled
+   inspection/replay procedure using an approved synthetic failure.
+8. [ ] Verify Lambda, EventBridge, HTTP API 5xx, and DynamoDB throttle alarm
+   definitions, states, actions, and owner delivery without creating a real
+   customer failure.
+9. [ ] Exercise containment and rollback: API-key revocation/rotation procedure,
+   schedule-disabled state, prior-artifact reference, data-retention behavior,
+   and named rollback authority.
+10. [ ] Confirm every prerequisite owner signs off before recurring work begins.
+11. [ ] Through a separately reviewed CloudFormation stack update, enable the
+    five-minute schedule; do not toggle it manually in the console.
+12. [ ] Confirm scheduled reconciliation, the independent canary, bounded
+    retries, and clean DLQ/alarm state.
+13. [ ] Serve the existing dashboard locally, verify the exact allowed origin,
+    and render compliance/timeline/incidents from the deployed boundary. Do not
+    add hosted dashboard resources during this smoke.
+14. [ ] With separate explicit authorization, run the guarded real-provider
+    smoke:
 
 ```bash
 PROOFLOOP_ALLOW_REAL_MODEL_SMOKE=true \
@@ -190,16 +282,9 @@ PROOFLOOP_MODEL_PROVIDER=bedrock \
 python scripts/smoke_bedrock_invoice.py
 ```
 
-6. [ ] Confirm the smoke prints only workflow/compliance status and token counts.
-7. [ ] Confirm one bounded invoice run cannot exceed the approved model-call,
-   retry, timeout and 2,000-output-token caps.
-8. [ ] Confirm five-minute reconciliation and the independent model-free canary.
-9. [ ] Confirm compliance, timeline and incident API/dashboard rendering from
-   the deployed boundary and approved browser origin.
-10. [ ] Inspect DynamoDB and logs for metadata-only persistence and safe logs.
-11. [ ] Exercise an approved synthetic failure through RED, remediation AMBER,
-   and fresh-proof GREEN without touching a customer workflow.
-12. [ ] Verify both DLQ alarm paths and the controlled replay procedure.
+15. [ ] Confirm the real-provider smoke, if authorized, prints only workflow/
+    compliance status and token counts and cannot exceed the approved model-
+    call, retry, timeout, and 2,000-output-token caps.
 
 Do not report a real-model accuracy rate from this single smoke. It is
 connectivity/contract evidence only.

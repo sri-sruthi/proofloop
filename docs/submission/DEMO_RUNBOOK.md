@@ -2,7 +2,35 @@
 
 **Duration:** 6-8 minutes  
 **Mode:** local-only, fake model, synthetic data  
-**Status:** implemented and locally tested on Python 3.12.7; not deployed
+**Status:** implemented; local Python 3.13, private Python 3.12/3.13 CI, and SAM
+package gates pass; AWS deployment and real Bedrock remain unexecuted
+
+## 30-45 second working demo - show this first
+
+Start the recording with working behavior, not setup or slides. From the
+repository root in the already prepared disposable environment, run:
+
+```bash
+python scripts/demo_proofloop.py
+```
+
+Keep the terminal framed on the five states:
+
+```text
+GREEN -> AMBER -> RED -> AMBER -> GREEN
+```
+
+Use this compact narration while the command runs:
+
+> ProofLoop begins GREEN only with fresh, correlated PASS evidence. Advancing
+> the synthetic clock makes that evidence stale, so it moves to AMBER. A safe
+> no-side-effect canary provides explicit FAIL evidence and drives RED. Merely
+> re-enabling configuration remains AMBER; only fresh post-remediation proof
+> restores GREEN. The transition history and incident are recorded without a
+> cloud account, customer data, or a model call.
+
+This is a deterministic local working demo, not AWS telemetry. After it
+finishes, continue into the fuller architecture/API/dashboard narrative below.
 
 ## Safety preflight
 
@@ -62,9 +90,13 @@ bounded fake-model call, and overall `GREEN`. Do not expand or display fields
 that contain transient request material; the safe response contract does not
 return invoice content.
 
-## Timed narration
+## Timed full narration
 
-### 0:00-0:45 - customer problem
+### 0:00-0:45 - working proof first
+
+Run the 30-45 second demonstration above and show the complete state sequence.
+
+### 0:45-1:20 - customer problem
 
 > Configuration dashboards can stay green after a runtime guardrail silently
 > stops executing. ProofLoop answers PS-6.2 by binding each obligation to fresh,
@@ -74,7 +106,7 @@ return invoice content.
 State the honest boundary: local vertical slice, deterministic fake model,
 synthetic data, no AWS deployment and no real Bedrock call.
 
-### 0:45-1:40 - architecture
+### 1:20-2:05 - architecture
 
 Show the architecture diagram in
 `docs/submission/PROOFLOOP_PS6_2_FINAL_WRITEUP.md`.
@@ -90,7 +122,7 @@ Narrate the two cooperating responsibilities:
 
 Emphasize that an LLM cannot set compliance status or next safe action.
 
-### 1:40-2:30 - happy path
+### 2:05-2:55 - happy path
 
 Run the Terminal 3 request. Point only to these safe response fields:
 
@@ -103,7 +135,7 @@ Run the Terminal 3 request. Point only to these safe response fields:
 Explain that the fifth supporting evidence item is the independently scheduled,
 model-free safe schema canary.
 
-### 2:30-3:40 - dashboard
+### 2:55-3:55 - dashboard
 
 Open `http://localhost:8000`, enter the same local key in the password field,
 and load the prefilled boundary. Point to:
@@ -117,7 +149,7 @@ and load the prefilled boundary. Point to:
 
 Clear the saved key before leaving the page or capturing a screenshot.
 
-### 3:40-5:15 - deterministic failures and recovery
+### 3:55-5:20 - deterministic failures and recovery
 
 Run:
 
@@ -142,21 +174,11 @@ The expected recovery sequence is:
 GREEN -> RED -> AMBER -> GREEN
 ```
 
-For the assignment's SLA-focused foundation demo, optionally run:
+The SLA-focused foundation demo already shown at the start produced
+`GREEN -> AMBER -> RED -> AMBER -> GREEN` and a resolved incident. Do not
+describe either script as live AWS telemetry.
 
-```bash
-python scripts/demo_proofloop.py
-```
-
-That deterministic scenario shows:
-
-```text
-GREEN -> AMBER -> RED -> AMBER -> GREEN
-```
-
-and a resolved incident. Do not describe either script as live AWS telemetry.
-
-### 5:15-6:20 - evidence and engineering controls
+### 5:20-6:20 - evidence and engineering controls
 
 Open `docs/submission/MANUAL_QA_EVIDENCE.md` and state:
 
@@ -167,20 +189,26 @@ Open `docs/submission/MANUAL_QA_EVIDENCE.md` and state:
 - all 14 manual scenarios passed at their labeled boundaries;
 - no raw invoice or prompt is persisted by the supported contracts.
 
-### 6:20-7:15 - honest release verdict
+### 6:20-7:20 - honest release verdict
 
 Close with the current boundary:
 
 - RUFF-01, BANDIT-01 and AUDIT-01 are closed by their authorized owners;
-- the complete Python 3.12 local code gate passes with pytest 9.1.1;
-- Python 3.13, SAM validation/build, GitHub CI, AWS deployment and real Bedrock
-  were not executed;
+- the clean local Python 3.13 gate passes with pytest 9.1.1 and 266 tests;
+- private GitHub Actions passes on Python 3.12 and native ARM64 Python 3.13;
+- local and CI SAM validation/build and both built-handler imports pass;
+- the allowed-origin injection, schedule activation, and essential alarm
+  findings remain accepted pre-change-set infrastructure blockers;
+- AWS identity/model preflight, a CloudFormation change set, deployment, smoke,
+  alarm validation, rollback, and real Bedrock were not executed;
 - AWS account activation and Mumbai Lambda availability are product-owner
   attested facts, not deployment evidence from this run.
 
 > The functional local slice is strong enough to demonstrate, but it is not a
-> production-ready release. The local code blockers are closed; the next step
-> is the separately authorized Python 3.13, SAM, CI and reviewed-change-set gate.
+> production-ready release. Python 3.13, SAM, and private CI are complete. The
+> next step is the separately approved, test-driven infrastructure-hardening
+> track; only after it passes CI may a read-only AWS preflight and non-executed
+> change set be considered.
 
 ## Fast recovery during recording
 
