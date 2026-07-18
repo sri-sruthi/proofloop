@@ -14,8 +14,9 @@ invoked. **Not deployed and not claimed production-ready.** Three accepted
 infrastructure blockers identified in G1.5 are implemented in Track G1.6:
 explicit allowed-origin injection, an initially disabled schedule activation
 control, and ten essential operational alarms routed to a stack-managed SNS
-topic. The changed package still requires the complete local/private-CI gate
-before any AWS preflight or non-executed change set.
+topic. The complete G1.6 local/private-CI gate passes: private run
+`29649766982` is green on Python 3.12 and native ARM64 Python 3.13. G2 still
+requires separate authorization and unresolved deployment inputs.
 
 ## What the slice proves
 
@@ -196,14 +197,15 @@ python infra/scripts/validate_template.py
 node --check dashboard/app.js
 ```
 
-Track F2 evidence records CPython 3.13.7 and pytest 9.1.1 locally with 266 tests,
-plus mypy, Ruff, Bandit, strict dependency audit, compile/import, both demos,
-template validation and dashboard syntax passing. Private GitHub Actions run
-`29640732187` passed on Python 3.12.13 and native ARM64 Python 3.13.14. SAM CLI
-1.163.0 validated and built both Lambda artifacts locally and on the ARM64
-Linux job, and both built handlers imported successfully. The attempted local
-Docker build is not claimed as passing; the native ARM64 CI build provides the
-target-architecture packaging evidence.
+Track G1.6 evidence records CPython 3.13.7 and pytest 9.1.1 locally with 277
+tests, plus mypy, Ruff, Bandit, strict project dependency audit,
+compile/import, both demos, template validation and dashboard syntax passing.
+Private GitHub Actions run `29649766982` passed on Python 3.12.13 and native
+ARM64 Python 3.13.14; both ran 277 tests. SAM CLI 1.163.0 strictly validated
+the template and built both Lambda artifacts locally and on the ARM64 Linux
+job, and both built handlers imported successfully. The isolated SAM CLI itself
+currently pins a vulnerable Click 8.1.8; see the final G1.6 handoff. Docker
+build is not claimed; native ARM64 CI provides target-architecture evidence.
 
 ## AWS SAM package
 
@@ -224,8 +226,10 @@ attempts cannot bypass the agent call cap. It creates no hosted dashboard, NAT
 Gateway, OpenSearch, EKS, ECS, or always-on compute. See
 [`codex/handovers/FINAL_AWS_EXECUTION_READINESS_REVIEW.md`](codex/handovers/FINAL_AWS_EXECUTION_READINESS_REVIEW.md).
 
-Do not create a change set until the changed template has passed the complete
-local and private Python 3.12/3.13 CI/SAM gate and G2 is separately authorized.
+The changed template has passed the complete local and private Python 3.12/3.13
+CI/SAM gate. Do not contact AWS or create a change set until G2 is separately
+authorized, mandatory deployment inputs are recorded, and the isolated SAM CLI
+tooling advisory is resolved or explicitly accepted.
 
 Build/validate without creating resources:
 

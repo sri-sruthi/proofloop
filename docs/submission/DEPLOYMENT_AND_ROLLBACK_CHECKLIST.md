@@ -1,15 +1,15 @@
 # ProofLoop Post-Activation Deployment and Rollback Checklist
 
 **Status:** G1.5 is offline-reviewed and the approved G1.6 infrastructure
-hardening is implemented locally but deliberately **not executed**. Python
-3.13, SAM, the strictly private Git baseline, and the carried-forward private
-Python 3.12/3.13 CI pass; the changed G1.6 commit still requires its complete
-private CI gate before the final non-executed change set.  
+hardening and its private CI gate are complete but deliberately **not
+executed**. Python 3.13, SAM, the strictly private Git baseline, and private
+Python 3.12/3.13 CI pass for G1.6 commit `4ae391e`; G2 remains separately gated
+before the final non-executed change set.  
 **Account fact:** payment verification is complete and Lambda is accessible in
 `ap-south-1`, as stated by the product owner; no Track G1.5 AWS call verified
 the account or region.  
-**Trigger order:** complete the G1.6 local/private CI gate; then separately
-authorize G2 read-only AWS preflight and one
+**Trigger order:** G1.6 local/private CI is complete. Next, separately authorize
+G2 read-only AWS preflight and, only after its inputs are resolved, one
 non-executed change set. Execution and real-model smoke require later, distinct
 approval.  
 **Rule:** a checked box requires captured evidence; do not infer success from
@@ -37,8 +37,8 @@ Record these in the release ticket before any command runs.
 - [x] **Dashboard strategy:** no hosting for backend smoke, then the existing
   local dashboard. No hosted dashboard resource belongs in the initial stack.
 - [x] **Initial schedule state:** `DISABLED` is explicitly approved and is the
-  parameter default. Enabling
-  later requires a reviewed stack update after every smoke/owner gate passes.
+  parameter default. Enabling later requires a reviewed stack update after
+  every smoke/owner gate passes.
 - [ ] **Tenant ID:** `________________`.
 - [ ] **Environment:** `DEVELOPMENT`, `STAGING`, or approved alternative:
   `________________`.
@@ -68,6 +68,10 @@ Record these in the release ticket before any command runs.
   conclusively verified `PRIVATE`; F2 author/visibility evidence is recorded.
 - [x] **Private CI gate:** run `29640732187` passed Python 3.12 and native ARM64
   Python 3.13 without deployment credentials.
+- [x] **G1.6 private CI gate:** run `29649766982` passed the hardened commit on
+  CPython 3.12.13 and native ARM64 CPython 3.13.14 with 277 tests in each job,
+  strict SAM lint, target build/import, audit, Bandit, mypy, Ruff,
+  compile/import, and dashboard syntax.
 - [ ] **Future deploy authorization:** secrets/OIDC approach, protected
   environment, required checks, deploy approvers, and allowed collaborators are
   recorded before any execution workflow exists.
@@ -102,7 +106,7 @@ Record these in the release ticket before any command runs.
   stack-managed SNS topic, and a required deploy-time email subscription.
 - [x] **DATA-POLICY-01:** TDD verifies explicit delete-on-stack-removal and
   retain-on-replacement table behavior.
-- [ ] The complete local and private Python 3.12/3.13 CI/SAM gate passes again
+- [x] The complete local and private Python 3.12/3.13 CI/SAM gate passes again
   after G1.6; no AWS preflight or change-set creation begins before it does.
 
 Detailed design and classification:
@@ -165,7 +169,8 @@ node --check dashboard/app.js
 
 Track G1.6 used isolated SAM CLI 1.163.0: strict transformed-template lint
 passed, a native CPython 3.13.7 ARM64 build succeeded, and both handlers imported
-from the fresh artifacts. The changed private Linux CI result remains pending.
+from the fresh artifacts. Private run `29649766982` repeated strict validation,
+native ARM64 Python 3.13 build, and both handler imports successfully.
 
 Install/use an approved SAM CLI without changing global software unexpectedly,
 then run from the repository root:
@@ -182,12 +187,16 @@ python infra/scripts/verify_built_handlers.py \
   configuration and
   makes no AWS call.
 - [x] Native local ARM64 build targets Python 3.13 and installs runtime
-  dependencies only. A container build is optional evidence; the changed Linux
-  target-architecture CI result remains pending.
+  dependencies only. A container build is optional evidence; native Linux
+  target-architecture CI passed.
 - [x] Both handlers and imported ProofLoop modules resolve from their build
   artifacts, not the editable source tree.
 - [x] Built artifacts contain no `.env`, API key, credentials, raw invoice,
   test cache or development toolchain.
+- [ ] Before G2 change-set creation, use a SAM release that permits fixed Click
+  8.3.3+ or explicitly review and accept the isolated SAM 1.163.0
+  `PYSEC-2026-2132` tooling advisory. The project/Lambda dependency audit is
+  green; this is a local CLI dependency finding.
 - [ ] The reviewed change set from `sam deploy --no-execute-changeset` or an
   equivalent preview contains only expected resources and IAM permissions.
 

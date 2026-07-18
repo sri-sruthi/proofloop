@@ -31,6 +31,34 @@ customer-production identity.
 This review changes documentation only. It deliberately does not repair the
 template, contact AWS, create a change set, deploy, or invoke Bedrock.
 
+## Track G1.6 resolution addendum
+
+The G1.5 findings below remain the historical design record. The separately
+approved G1.6 implementation now closes all three template blockers plus the
+approved DynamoDB lifecycle decision in commit
+`4ae391edcaf38d82017667967c0d3414a1129f6e`:
+
+- required non-wildcard `AllowedOrigin` and API environment injection;
+- `EnableReconciliationSchedule=false` by default through an explicit
+  CloudFormation condition;
+- ten approved standard metric alarms, one stack-managed SNS topic, and one
+  required parameterized email subscription; and
+- `DeletionPolicy: Delete` with `UpdateReplacePolicy: Retain` on the evidence
+  table.
+
+The complete local CPython 3.13 gate reports 277 passing tests, and private CI
+run [29649766982](https://github.com/sri-sruthi/proofloop-aivar-private/actions/runs/29649766982)
+passed on CPython 3.12.13 and native ARM64 CPython 3.13.14, including strict SAM
+lint/build and built-handler imports. No AWS call, change set, deployment,
+resource, schedule activation, or Bedrock request occurred.
+
+G1.6 is ready to request a separately authorized G2 read-only identity/model
+preflight. Change-set creation remains gated on the exact caller/model/ARN/
+stack/secret/owner/budget inputs and on selecting or explicitly accepting an
+isolated SAM CLI path: current SAM 1.163.0 pins Click 8.1.8, which strict audit
+flags as `PYSEC-2026-2132` (fixed in Click 8.3.3). See
+`codex/handovers/FINAL_G1_6_INFRASTRUCTURE_HARDENING.md` for exact evidence.
+
 ## Evidence carried forward from Track F2
 
 | Evidence | Carried-forward result |
