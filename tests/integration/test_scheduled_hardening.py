@@ -178,6 +178,9 @@ def test_ci_builds_in_container_and_verifies_both_built_handler_trees() -> None:
         encoding="utf-8"
     )
 
+    assert "AWS_DEFAULT_REGION: ap-south-1" in workflow
+    assert "AWS_REGION: ap-south-1" in workflow
+    assert 'SAM_CLI_TELEMETRY: "0"' in workflow
     assert "sam build -t infra/template.yaml --use-container" in workflow
     assert "python infra/scripts/verify_built_handlers.py" in workflow
     assert ".aws-sam/build/ProofLoopApiFunction" in workflow
