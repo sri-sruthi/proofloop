@@ -1,223 +1,195 @@
-# ProofLoop Offline Data-Science Evaluation — Final Handoff
+# ProofLoop Offline Data-Science Evaluation — Repaired Final Handoff
 
-**Date:** 2026-07-18
-**Track:** Claude — offline data-science evaluation layer
-**Branch:** `claude/offline-data-science-evaluation`
-**Worktree:** `.worktrees/claude-offlin-science-evaluation`
-**Base:** integrated `main` after the Claude documentation checkpoint
-**Decision:** **IMPLEMENTED, TESTED, ISOLATED — OFFLINE ANALYTICAL SUPPORT ONLY**
-**AWS / Bedrock:** no AWS call, no Bedrock request, no deployment, no
-CloudFormation, no schedule change
+**Date:** 2026-07-19  
+**Original Claude head:** `967e05c055c732789720fd5b79042123c10b23b0`  
+**Repair branch:** `codex/review-claude-offline-data-science`  
+**Decision:** **LOCAL PASS — PRIVATE CI AND INTEGRATION STILL REQUIRED**  
+**AWS / Bedrock:** no AWS call, model request, deployment, change set, or
+schedule change  
 **Production readiness:** not claimed
-
----
 
 ## Customer outcome
 
-ProofLoop now has an offline evaluation harness that answers the customer's
-trust questions about invoice extraction — field trust, failing document
-kinds, when to ask a human, financial-harm errors, whether confidence is
-meaningful, and latency/token/cost trade-offs — **without ever touching the
-deterministic GREEN/AMBER/RED verdict**. The layer is structurally fenced out
-of the runtime in both import directions, so measuring and improving the model
-carries zero runtime risk.
+The offline extraction-evaluation layer now fails safely at every confirmed
+customer-trust boundary. Records cannot be mutated after validation; raw or
+arbitrary payload fields are not representable; incomplete evidence cannot
+become a free auto-accept; costs cannot be negative or non-finite; paired CLI
+reports cannot be partially published; and the offline evaluation package is
+absent from both Lambda artifacts.
 
-## Architecture and isolation evidence
+The layer remains analytical support only. It cannot reach or change runtime
+GREEN/AMBER/RED, invoice disposition, HITL, payment, evidence freshness, AWS,
+or Bedrock.
 
-`proofloop.evaluation` imports only the Python standard library and Pydantic
-(an existing project dependency). It imports no other ProofLoop package and no
-cloud SDK. The isolation is enforced by tests, not convention:
+## Repairs completed
 
-- **Forward AST scan** — no evaluation source imports any runtime package
-  (`domain`, `agents`, `application`, `infrastructure`, `api`), banned SDK
-  (`boto3`, `botocore`, `requests`, `httpx`, `socket`, `urllib`, `pandas`,
-  `numpy`, `sklearn`), or runtime verdict type (`EvidenceEnvelope`,
-  `AssuranceEvaluation`, `ComplianceReadModel`, `ControlObservation`).
-- **Reverse AST scan** — no runtime source imports `proofloop.evaluation`.
-- **Clean-subprocess probe** — importing the whole evaluation package pulls
-  zero runtime modules and zero banned dependencies into `sys.modules`.
-- **Vocabulary guard** — `report.py` is checked to never emit runtime verdict
-  fields (`"GREEN"/"AMBER"/"RED"/overall_compliance_status`), so its output
-  cannot be mistaken for or spliced into a compliance record.
+1. `EvaluationRecord` defensively copies and freezes expected/predicted field
+   mappings while preserving their JSON-object representation.
+2. Schema `1.0.0` exposes a bounded invoice-scalar allow-list and conservative
+   PII/credential/prompt/control-content guards. These are a structural
+   backstop, not enterprise DLP; upstream de-identification remains required.
+3. `schema_valid_rate` was removed. The replacement,
+   `numeric_prediction_parse_availability_rate`, measures whether expected
+   numeric predictions are present and conservatively parseable. It does not
+   claim extraction-schema validity.
+4. Unjudgeable or incomplete records always route to review. A wholly
+   unjudgeable dataset reports `INSUFFICIENT_EVIDENCE` with no supported claim.
+5. Review costs, error costs, and token prices must be finite and non-negative
+   at direct, configuration, and CLI boundaries.
+6. CLI JSON/Markdown publication uses sibling temporary files, atomic replace,
+   backup/rollback, safe one-line errors, and cleanup.
+7. The Lambda copy helper excludes `proofloop.evaluation`, `__pycache__`,
+   `.pyc`, and `.pyo`. Built-handler verification enforces the same boundary
+   before and after import.
 
-## Exact files changed
+## Exact repair files
 
-Created (Claude-owned scope only):
-
-- `src/proofloop/evaluation/__init__.py`
 - `src/proofloop/evaluation/records.py`
-- `src/proofloop/evaluation/normalization.py`
 - `src/proofloop/evaluation/metrics.py`
 - `src/proofloop/evaluation/calibration.py`
 - `src/proofloop/evaluation/report.py`
 - `scripts/evaluate_extraction.py`
-- `tests/evaluation/__init__.py`
-- `tests/evaluation/eval_fixtures.py`
 - `tests/evaluation/test_evaluation_records.py`
-- `tests/evaluation/test_evaluation_normalization.py`
 - `tests/evaluation/test_evaluation_metrics.py`
-- `tests/evaluation/test_evaluation_calibration.py`
 - `tests/evaluation/test_evaluation_selective.py`
 - `tests/evaluation/test_evaluation_report.py`
 - `tests/evaluation/test_evaluation_cli.py`
-- `tests/evaluation/test_evaluation_isolation.py`
+- `infra/scripts/copy_runtime_package.py`
+- `infra/scripts/verify_built_handlers.py`
+- `infra/lambda/Makefile`
+- `tests/integration/test_lambda_packaging_isolation.py`
+- `tests/integration/test_scheduled_hardening.py`
 - `docs/submission/DATA_SCIENCE_EVALUATION.md`
 - `claude/DATA_SCIENCE_INTERVIEW_GUIDE.md`
-- `claude/handovers/FINAL_DATA_SCIENCE_EVALUATION_HANDOFF.md` (this file)
-- `docs/superpowers/plans/2026-07-18-proofloop-offline-data-science-evaluation.md`
+- `claude/handovers/FINAL_DATA_SCIENCE_EVALUATION_HANDOFF.md`
+- `codex/handovers/FINAL_CLAUDE_DATA_SCIENCE_INDEPENDENT_REVIEW.md`
+- `docs/superpowers/plans/2026-07-19-proofloop-ds-package-repair.md`
 
-No runtime source, test, infrastructure, template, workflow, dashboard,
-README, deployment/rollback doc, or Codex-owned file was modified. The commit
-touched only new evaluation/test/doc files.
+No agent, privacy, domain-verdict, API, dashboard, SAM-template, or CI-workflow
+implementation changed.
 
-## Tests added — exact counts
+## Test-first evidence
 
-72 evaluation tests, all passing:
+Before implementation, focused regressions reproduced:
 
-| File | Tests |
-|---|---:|
-| `test_evaluation_records.py` | 14 |
-| `test_evaluation_normalization.py` | 8 |
-| `test_evaluation_metrics.py` | 16 |
-| `test_evaluation_calibration.py` | 7 |
-| `test_evaluation_selective.py` | 5 |
-| `test_evaluation_report.py` | 11 |
-| `test_evaluation_cli.py` | 6 |
-| `test_evaluation_isolation.py` | 5 |
-| **Total** | **72** |
+- mutable nested field dictionaries;
+- arbitrary/raw/prompt/model-output/credential field names;
+- PII/credential/prompt/unbounded values and a long-ID false positive;
+- missing numeric predictions reporting a vacuous value of one;
+- high-confidence incomplete evidence being auto-accepted;
+- wholly unjudgeable evidence reporting `OK`;
+- negative/non-finite costs and CLI tracebacks;
+- partial JSON left behind when Markdown publication failed;
+- evaluation/cache content present in both Lambda artifacts.
 
-Full suite: **349 passed** (was 277 before this track; +72). No existing test
-was weakened, skipped, or deleted.
-
-## Metrics implemented
-
-1. Field-level exact match (raw string equality)
-2. Field-level normalized match (NFKC → whitespace collapse → casefold)
-3. Invoice-level exact match (all expected fields normalized-match)
-4. Absolute numeric error (exact Decimal)
-5. Relative numeric error (explicit zero-denominator exclusion + count)
-6. Schema-valid rate (numeric parseability under the conservative policy)
-7. Brier score (binary target = invoice-level normalized match, documented)
-8. Calibration bins (10 fixed-width, right-closed last bin)
-9. Expected calibration error (count-weighted)
-10. Coverage-versus-accuracy / selective-risk table
-11. Cost-sensitive confidence-threshold sweep (caller-supplied costs only)
-12. Latency summaries (count/min/max/mean/median/nearest-rank p95)
-13. Token summaries (present-only totals/means; missing counted, not zeroed)
-14. Optional estimated cost summaries (caller-supplied per-1k prices; omitted
-    entirely when absent)
-
-Every metric result declares numerator, denominator, value (None on empty),
-sample count, missing/zero-denominator exclusion counts, sufficiency status,
-kind (`DESCRIPTIVE | CALIBRATION | DECISION_SUPPORT`), and limitations.
-
-## Commands executed — actual results
+After the narrow repairs:
 
 ```text
-python -m pytest -q                       -> 349 passed
-python -m pytest -q tests/evaluation      -> 72 passed
-python -m pytest -q tests/evaluation/test_evaluation_isolation.py \
-                    tests/agents/test_agent_isolation.py  -> 7 passed
-python -m mypy src/proofloop tests        -> Success: no issues in 105 files
-python -m compileall -q src tests scripts infra/scripts   -> exit 0
-python scripts/demo_proofloop.py          -> exit 0 (unaffected)
-python scripts/demo_agent_to_compliance.py-> exit 0 (unaffected)
-PYTHONPATH=src python scripts/evaluate_extraction.py <synthetic dataset> \
-  --json-out ... --markdown-out ... --review-cost 1 --error-cost 25 \
-  --input-token-price-per-1k 3.00 --output-token-price-per-1k 15.00 \
-  --price-currency USD --run-id demo-run
-  -> exit 0; status=OK claim_boundary=SYNTHETIC_ONLY; deterministic on rerun
+focused evaluation + packaging tests  124 passed in 2.05s
+evaluation tests collected             117
+packaging-isolation tests               7 passed in 0.03s
+complete project suite                  401 passed in 3.91s
+mypy                                    no issues in 106 source files
+Ruff                                    all checks passed
+Bandit                                  exit 0
+pip-audit --strict                      no known vulnerabilities
+compileall                              exit 0
+both demos                              exit 0
+dashboard JavaScript syntax             exit 0
+template structural validator           passed
+SAM CLI                                 1.163.0
+strict SAM lint                         valid
+clean SAM build                         succeeded on CPython 3.13.7 arm64
+built handlers                          2 verified
+artifact evaluation/cache/bytecode      no matches
+artifact secret patterns                no matches
 ```
 
-Local environment: CPython 3.12.7, Pydantic 2.13.4, pytest 7.4.4 (the base
-Anaconda env; the project pins `pytest>=9.0.3,<10` for the declared dev/CI
-environment — a version note, not a failure).
+The first SAM build attempt was blocked by sandbox DNS. The identical local
+build succeeded after approved PyPI access. No AWS endpoint was contacted.
 
-## Verification limitations (honest)
+## Determinism evidence
 
-- **Ruff, Bandit, and pip-audit are NOT installed in this local environment**
-  (`No module named ...`, not on PATH). I did not install software. I make no
-  first-hand green claim for them. The new code is written correct-by-
-  construction: an over-length-line sweep found and fixed the only two >88-char
-  lines; an AST unused-import sweep found none (only `from __future__ import
-  annotations`, which is used). Authoritative Ruff/Bandit/pip-audit evidence
-  must come from Codex's private CI, exactly as for prior tracks.
-- **No real Bedrock call and no customer data** were used. All fixtures are
-  synthetic; the report's own `claim_boundary` is `SYNTHETIC_ONLY`.
+Two independent CLI runs over the same ordered synthetic dataset and config
+were byte-identical:
+
+- JSON SHA-256:
+  `1fa7a08a8bf4466463717993ca006264ed8bac82c3d7d730215d6ae7a5acdc4f`
+- Markdown SHA-256:
+  `84637feb3baea55f89b8ff4c1e1cf7131bc1958e2c2b518feead9cf4197143e9`
+
+Result: `status=OK`, `claim_boundary=SYNTHETIC_ONLY`. This proves harness
+repeatability only, not production accuracy or model quality.
 
 ## Claims permitted
 
-- The evaluation harness exists, is deterministic (byte-identical output on
-  identical ordered input + config, excluding `run_metadata`), is fully
-  unit-tested (72 tests), and is structurally isolated from the runtime verdict
-  path (verified in both import directions).
-- All metrics match hand-computed miniature examples (Brier 0.2225, ECE
-  0.316666666667, cost sweep 2.75/0.5, etc.).
-- Sample sizes are always reported exactly; the report distinguishes computed
-  values from conclusions the evidence does or does not support.
+- The repaired evaluation harness is deterministic on identical ordered
+  inputs/configuration and rejects the confirmed unsafe boundary cases.
+- Runtime and evaluation imports remain isolated in both directions.
+- The evaluation package is absent from both clean Lambda artifacts.
+- Synthetic fixtures exercise the harness but support no production accuracy,
+  calibration, latency, cost, or model-superiority claim.
 
-## Claims that remain prohibited
+## Required handoff fields
 
-- Any production accuracy, calibration, latency, or cost figure — fixtures are
-  synthetic; the report says so.
-- Any model-superiority conclusion — no real Bedrock request exists.
-- Any minimum-sample-size / production-readiness claim.
-- Any influence on the runtime compliance verdict, invoice disposition, HITL
-  boundary, evidence freshness, payment, or approval — structurally impossible
-  and test-enforced.
+**Task:** Repair the independently confirmed DS and packaging blockers with
+TDD, then run the complete local Python 3.13/SAM gate.
 
-## Branch and commits
+**Customer outcome:** Misleading evidence, unsafe record content, partial
+reports, and unnecessary deployed attack surface are blocked by executable
+contracts.
 
-- Documentation checkpoint (canonical `main`): `ad87c31` —
-  `docs: reconcile Claude interview documents with G1.6 gate`
-- Evaluation implementation (this branch): `0faad45` —
-  `feat: add offline data-science evaluation layer`
-- Author/committer: `Sri Sruthi Manikka Nagasamy <sruthimanikka@gmail.com>`;
-  no AI/bot co-author or attribution trailer.
-- Not pushed, not merged.
+**Files read:** Original DS handoff/plan, every evaluation source/test, CLI,
+runtime isolation boundaries, packaging Makefile/scripts, CI, SAM template,
+DS docs, and project rules.
 
-## Integration risks
+**Files changed:** Exact list above.
 
-- **Low.** The layer adds files under new paths only; it changes no runtime
-  behavior, so it cannot regress the deployed slice. The only merge
-  consideration is that `main` moved to 277 tests via Codex G1.6 before this
-  branch was cut from it, so a merge lands at 349 tests cleanly (this branch
-  is already based on the G1.6-integrated `main`).
-- **CI note:** Codex's private CI runs Ruff/Bandit/pip-audit; the new files
-  should pass, but Codex should confirm since they are the authoritative
-  environment for those tools.
-- **`AWSCLIV2.pkg`** remains untracked in the canonical worktree; it must
-  never be staged (it was not).
+**Review findings resolved:** DS-RECORD-01, DS-METRIC-02, DS-DECISION-03,
+DS-EVIDENCE-04, DS-COST-05, DS-CLI-06, and PKG-BOUNDARY-01.
 
-## Recommended independent Codex review prompt
+**Contract changes:** Exact seven-item repair list above.
 
-> Independently review Claude's `claude/offline-data-science-evaluation`
-> branch (commit `0faad45`) as a READ-ONLY audit. Confirm: (1) `proofloop.
-> evaluation` imports only stdlib + Pydantic and no runtime package imports
-> it — re-run both AST scans and the clean-subprocess probe; (2) the runtime
-> GREEN/AMBER/RED verdict, invoice disposition, HITL boundary, and evidence
-> freshness are provably unreachable from the evaluation layer; (3) every
-> metric's numerator/denominator/zero-denominator/missing-value behavior
-> matches the documentation and the hand-computed examples; (4) the
-> normalization policy never merges genuinely different invoice values; (5)
-> the report's sufficiency and claim-boundary logic blocks production/accuracy
-> claims on synthetic data and flags tuning/reporting split misuse. Then run
-> Ruff, Bandit, and pip-audit (unavailable in Claude's local env) and the full
-> suite in the private CI environment and report exact results. Do not deploy,
-> call AWS/Bedrock, change infrastructure, or merge without product-owner
-> authorization.
+**Migration instructions for Claude:** Use only `INVOICE_SCALAR_FIELDS_V1`
+keys; use the new metric name; keep records deeply immutable; route incomplete
+evidence to review; preserve transactional publication and runtime isolation.
 
-## Five files the human should inspect
+**Tests added:** 52 beyond the original 349-test branch result; final local
+suite count 401.
 
-1. `tests/evaluation/test_evaluation_isolation.py` — the isolation proof
-2. `src/proofloop/evaluation/metrics.py` — sufficiency + numeric error rules
-3. `src/proofloop/evaluation/calibration.py` — Brier/ECE/selective/sweep
-4. `docs/submission/DATA_SCIENCE_EVALUATION.md` — customer-facing explanation
-5. `scripts/evaluate_extraction.py` — validate-before-compute, safe-fail CLI
+**Commands executed / actual results:** Recorded above and in the independent
+Codex review.
 
-## Concepts the human must understand
+**Production risks checked:** Privacy/content entry, mutability, metric truth,
+evidence sufficiency, cost safety, failure atomicity, import isolation,
+dependency vulnerabilities, secret patterns, SAM validity, handler imports,
+and artifact contents.
 
-Calibration versus confidence; why the runtime verdict stays deterministic;
-threshold selection as a caller-owned business-cost decision; data vs. quality
-vs. model-contract drift; split leakage and the tuning/reporting rule; and why
-synthetic fixtures verify the harness but support no production claim.
+**Known limitations:** No customer data, real model call, AWS resource,
+deployment, CloudFormation preview, or production performance evidence exists.
+
+**Human decisions still required:** Phase 3 private CI/integration must pass.
+AWS work later requires the confirmed non-root profile and explicit deployment
+approval gates from the master track.
+
+**Five files the human should inspect:**
+
+1. `src/proofloop/evaluation/records.py`
+2. `src/proofloop/evaluation/metrics.py`
+3. `scripts/evaluate_extraction.py`
+4. `infra/scripts/copy_runtime_package.py`
+5. `codex/handovers/FINAL_CLAUDE_DATA_SCIENCE_INDEPENDENT_REVIEW.md`
+
+**Concepts the human must understand:** Deep versus shallow immutability;
+parseability versus schema validity; unjudgeable evidence; transactional
+multi-file publication; import isolation versus deployment-package isolation.
+
+**Recommended Claude review focus:** Guard false-positive/negative trade-offs,
+metric naming, review routing, rollback behavior, and preservation of runtime
+verdict isolation.
+
+**Documentation updated:** DS evaluation guide, interview guide, this handoff,
+independent review, and repair plan.
+
+**Git diff summary:** Approved DS/test/package/documentation repair only. At
+this checkpoint, Phase 3 commit/push/private CI/integration is still pending.

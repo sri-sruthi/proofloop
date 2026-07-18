@@ -11,17 +11,22 @@ function that this layer can neither reach nor change.
 
 An offline evaluation harness for the invoice-extraction workload:
 
-- **A versioned, PII-free data contract** (`EvaluationRecord`, schema 1.0.0)
+- **A versioned, bounded data contract** (`EvaluationRecord`, schema 1.0.0)
   describing one labeled extraction outcome: expected fields, predicted
   fields, model-reported confidence, provider/prompt configuration
-  identifiers, latency, token counts, provenance, and split.
+  identifiers, latency, token counts, provenance, and split. Field mappings
+  are defensively copied, deeply immutable, and limited to the declared
+  invoice-scalar allow-list. Conservative PII/credential/content refusal
+  gates are a backstop, not an enterprise DLP replacement.
 - **Deterministic metrics** (`proofloop.evaluation`): match rates, numeric
-  errors, schema-valid rate, Brier score, calibration bins, expected
+  errors, numeric-prediction parse/availability rate, Brier score,
+  calibration bins, expected
   calibration error, selective risk, a cost-sensitive threshold sweep, and
   latency/token/cost summaries.
 - **A CLI** (`scripts/evaluate_extraction.py`) that validates before
-  computing and writes deterministic JSON (for machines) and Markdown (for
-  humans).
+  computing and transactionally publishes deterministic JSON (for machines)
+  and Markdown (for humans). A paired-output failure restores existing files
+  and leaves no new partial report.
 
 The same ordered records and configuration always produce byte-identical
 output, excluding only the documented `run_metadata` (run identifier).
@@ -33,7 +38,7 @@ output, excluding only the documented `run_metadata` (run identifier).
 | Field exact / normalized match | Can I trust each extracted invoice field? |
 | Invoice-level match | How often is the whole invoice right end to end? |
 | Absolute / relative numeric error | Which errors could cause financial harm, and how big are they? |
-| Schema-valid rate | How often does the model at least produce well-formed numbers? |
+| Numeric-prediction parse/availability rate | When a numeric field is expected, is its prediction present and conservatively parseable? |
 | Brier score, calibration bins, ECE | Is model-reported confidence meaningful? |
 | Coverage-versus-accuracy (selective risk) | When should the workflow ask a human for help? |
 | Cost-sensitive threshold sweep | Where is *my* cheapest trade-off between review effort and error cost? |
@@ -62,9 +67,11 @@ expected value is 0, division is undefined — those records are **excluded
 from the mean and counted separately** (`excluded_zero_denominator`), never
 divided or guessed.
 
-**Schema-valid rate.** The share of records whose predicted numeric fields
-all parse as plain decimals. It answers a cheaper question than accuracy:
-"did the model even produce a usable number?"
+**Numeric-prediction parse/availability rate.** Among records with at least
+one expected numeric field, the share where every expected numeric prediction
+is present and parses as a plain decimal. Records with no expected numeric
+field are excluded and counted. This is deliberately **not** called schema
+validation: it does not validate the complete extraction schema.
 
 **Brier score.** For every record with a confidence value:
 `(confidence − outcome)²`, averaged, where the **binary target is
@@ -87,13 +94,14 @@ a fabricated zero.
 **Selective risk (coverage versus accuracy).** For each threshold *t*:
 auto-accept records with confidence ≥ *t*, send the rest to a human.
 *Coverage* = share auto-accepted; *risk* = error rate among the auto-accepted.
-A record with **no confidence value can never be auto-accepted** — a missing
-number is unknown, not zero.
+A record with **no confidence value, no expected evidence, or a missing
+expected prediction can never be auto-accepted** — incomplete evidence routes
+to review regardless of confidence.
 
 **Cost-sensitive threshold sweep.** Expected cost per invoice at threshold
 *t* = (reviews × review_cost + wrong auto-accepts × error_cost) ÷ N. Both
-costs are **caller-supplied business inputs** — the harness hard-codes no
-price. Worked miniature (review 1, error 10, four invoices): at t=0, one
+costs are **caller-supplied, finite, non-negative business inputs** — the
+harness hard-codes no price. Worked miniature (review 1, error 10, four invoices): at t=0, one
 review + one wrong accept → (1 + 10)/4 = 2.75; at t=0.75, two reviews and no
 wrong accepts → 0.5. The sweep is labeled decision support: it informs a
 human business choice offline; it never sets a runtime threshold by itself.
@@ -101,7 +109,7 @@ human business choice offline; it never sets a runtime threshold by itself.
 **Latency/token summaries.** Count, min, max, mean, median, and nearest-rank
 p95 over `latency_ms`; totals and means over token counts, with missing
 values counted rather than zeroed. Optional cost estimates multiply token
-totals by caller-supplied per-1k prices.
+totals by caller-supplied finite, non-negative per-1k prices.
 
 ## 4. Where data science belongs in ProofLoop
 
@@ -130,7 +138,9 @@ recommendation, or ML score can create or modify GREEN/AMBER/RED, approve an
 invoice, release a payment, bypass HITL, or alter evidence freshness. This is
 enforced structurally: `proofloop.evaluation` imports no runtime package, no
 runtime package imports it (both directions are locked by tests), and its
-report never even emits runtime-verdict vocabulary.
+report never even emits runtime-verdict vocabulary. The SAM packaging helper
+also excludes `proofloop.evaluation`, Python caches, and bytecode from both
+Lambda artifacts; built-artifact verification enforces that boundary.
 
 ## 6. The normalization policy (exact and conservative)
 
@@ -168,7 +178,7 @@ final performance **reported** from that same split. The report flags this
 
 - **Data drift:** incoming documents change (new vendor layouts, new
   languages, scan quality). Detect via per-category/source tags and rising
-  schema-invalid or unparseable counts.
+  numeric-prediction missing or unparseable counts.
 - **Quality drift:** the same kinds of documents start scoring worse (match
   rates fall, numeric errors grow) — the model/prompt is degrading relative
   to the workload.
@@ -194,7 +204,7 @@ is; leakage silently converts an honest estimate into marketing.
 
 **Can be claimed now:**
 - The evaluation harness exists, is deterministic, is fully unit-tested, and
-  is structurally isolated from the runtime verdict path.
+  is structurally isolated from the runtime verdict path and Lambda artifacts.
 - All metrics behave correctly on hand-computed miniature examples and on
   synthetic fixtures.
 
@@ -212,9 +222,11 @@ is; leakage silently converts an honest estimate into marketing.
 
 1. **Authorization first:** written product-owner approval naming the data
    source, retention window, and deletion date.
-2. **De-identification before ingestion:** PII removal happens upstream; the
-   record schema stores only structured field values, and its guard rejects
-   e-mail-shaped values and card-length digit runs as a backstop.
+2. **De-identification before ingestion:** PII removal happens upstream. The
+   record schema stores only bounded allow-listed invoice scalar values and
+   rejects common PII, credential, prompt-marker, control-character, and
+   arbitrary-payload shapes as a conservative backstop. This is not a DLP
+   system and does not replace an approved enterprise de-identification step.
 3. **Provenance labeling:** records enter as `DEIDENTIFIED_CUSTOMER` with
    category/difficulty/source tags, split assignment fixed **before** any
    metric is run, holdout untouched until the final report.

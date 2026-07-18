@@ -8,6 +8,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from scripts import evaluate_extraction as evaluation_cli
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLI = REPO_ROOT / "scripts" / "evaluate_extraction.py"
 
@@ -128,6 +132,116 @@ def test_optional_pricing_flags_produce_cost_estimates(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     report = json.loads(json_out.read_text(encoding="utf-8"))
     assert report["estimated_cost"]["currency"] == "USD"
+
+
+@pytest.mark.parametrize(
+    "cost_flags",
+    (
+        ("--review-cost", "-1", "--error-cost", "1"),
+        ("--review-cost", "NaN", "--error-cost", "1"),
+        ("--review-cost", "1", "--error-cost", "Infinity"),
+        (
+            "--input-token-price-per-1k",
+            "-1",
+            "--output-token-price-per-1k",
+            "1",
+        ),
+        (
+            "--input-token-price-per-1k",
+            "1",
+            "--output-token-price-per-1k",
+            "NaN",
+        ),
+    ),
+)
+def test_invalid_costs_fail_safely_without_output(
+    tmp_path: Path, cost_flags: tuple[str, ...]
+) -> None:
+    dataset_file = tmp_path / "dataset.json"
+    dataset_file.write_text(json.dumps(_dataset_payload()), encoding="utf-8")
+    json_out = tmp_path / "report.json"
+    result = _run_cli(
+        str(dataset_file),
+        "--json-out",
+        str(json_out),
+        *cost_flags,
+        cwd=tmp_path,
+    )
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    assert not json_out.exists()
+
+
+def test_paired_output_failure_leaves_no_new_partial_report(tmp_path: Path) -> None:
+    dataset_file = tmp_path / "dataset.json"
+    dataset_file.write_text(json.dumps(_dataset_payload()), encoding="utf-8")
+    json_out = tmp_path / "report.json"
+    markdown_target = tmp_path / "markdown-is-a-directory"
+    markdown_target.mkdir()
+
+    result = _run_cli(
+        str(dataset_file),
+        "--json-out",
+        str(json_out),
+        "--markdown-out",
+        str(markdown_target),
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    assert not json_out.exists()
+
+
+def test_paired_output_failure_preserves_preexisting_report(tmp_path: Path) -> None:
+    dataset_file = tmp_path / "dataset.json"
+    dataset_file.write_text(json.dumps(_dataset_payload()), encoding="utf-8")
+    json_out = tmp_path / "report.json"
+    json_out.write_text("existing-review-evidence", encoding="utf-8")
+    markdown_target = tmp_path / "markdown-is-a-directory"
+    markdown_target.mkdir()
+
+    result = _run_cli(
+        str(dataset_file),
+        "--json-out",
+        str(json_out),
+        "--markdown-out",
+        str(markdown_target),
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    assert json_out.read_text(encoding="utf-8") == "existing-review-evidence"
+
+
+def test_publication_rolls_back_if_second_atomic_replace_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    json_out = tmp_path / "report.json"
+    markdown_out = tmp_path / "report.md"
+    json_out.write_text("old-json", encoding="utf-8")
+    markdown_out.write_text("old-markdown", encoding="utf-8")
+    real_replace = evaluation_cli.os.replace
+    replace_calls = 0
+
+    def fail_second_publication(source: Path, target: Path) -> None:
+        nonlocal replace_calls
+        replace_calls += 1
+        if replace_calls == 4:
+            raise OSError("synthetic second-publication failure")
+        real_replace(source, target)
+
+    monkeypatch.setattr(evaluation_cli.os, "replace", fail_second_publication)
+    with pytest.raises(evaluation_cli.SafeCliError, match="publication failed"):
+        evaluation_cli._publish_outputs(
+            {json_out: "new-json", markdown_out: "new-markdown"}
+        )
+
+    assert json_out.read_text(encoding="utf-8") == "old-json"
+    assert markdown_out.read_text(encoding="utf-8") == "old-markdown"
+    assert not tuple(tmp_path.glob(".*.tmp"))
+    assert not tuple(tmp_path.glob(".*.backup"))
 
 
 def test_cli_source_never_touches_aws_or_runtime_state() -> None:

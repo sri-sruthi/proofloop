@@ -10,8 +10,8 @@ from proofloop.evaluation.metrics import (
     field_match_results,
     invoice_exact_match,
     latency_summary,
+    numeric_prediction_parse_availability_rate,
     numeric_error_results,
-    schema_valid_rate,
     token_summary,
 )
 from .eval_fixtures import make_record
@@ -142,7 +142,7 @@ def test_unparseable_amounts_are_excluded_and_counted_never_guessed() -> None:
     assert absolute.excluded_missing == 1
 
 
-def test_schema_valid_rate_checks_numeric_parseability_of_predictions() -> None:
+def test_numeric_prediction_rate_checks_parseability_and_availability() -> None:
     valid = make_record(dataset_record_id="r1")
     invalid = make_record(
         dataset_record_id="r2",
@@ -152,10 +152,36 @@ def test_schema_valid_rate_checks_numeric_parseability_of_predictions() -> None:
             "total": "1,234",
         },
     )
-    result = schema_valid_rate((valid, invalid))
+    result = numeric_prediction_parse_availability_rate((valid, invalid))
     assert result.value == "0.5"
     assert result.numerator == "1"
     assert result.denominator == "2"
+    assert result.metric_id == "numeric_prediction_parse_availability_rate"
+
+
+def test_numeric_prediction_rate_counts_missing_expected_numeric_field_as_invalid(
+) -> None:
+    missing_total = make_record(
+        expected_fields={"invoice_number": "INV-1001", "total": "10.00"},
+        predicted_fields={"invoice_number": "INV-1001"},
+    )
+    result = numeric_prediction_parse_availability_rate((missing_total,))
+    assert result.value == "0"
+    assert result.numerator == "0"
+    assert result.denominator == "1"
+
+
+def test_numeric_prediction_rate_excludes_records_without_expected_numeric_fields(
+) -> None:
+    not_applicable = make_record(
+        expected_fields={"invoice_number": "INV-1001"},
+        predicted_fields={"invoice_number": "INV-1001"},
+    )
+    result = numeric_prediction_parse_availability_rate((not_applicable,))
+    assert result.value is None
+    assert result.denominator == "0"
+    assert result.excluded_missing == 1
+    assert result.sufficiency is SufficiencyStatus.INSUFFICIENT_EVIDENCE
 
 
 def test_latency_summary_reports_deterministic_order_statistics() -> None:

@@ -10,7 +10,7 @@ this file is the defense script. Everything here is true of branch
 ## The 30-second answer
 
 > "I added an offline data-science evaluation layer for the invoice
-> extractor: versioned PII-free records, deterministic metrics — match rates,
+> extractor: versioned bounded records, deterministic metrics — match rates,
 > exact-decimal numeric errors, Brier score, calibration bins, ECE, selective
 > risk, and a cost-based threshold sweep — with JSON and Markdown reports.
 > It's structurally fenced out of the runtime: the evaluation package and the
@@ -93,7 +93,9 @@ and error costs gives the owner a defensible threshold proposal.
 **Q: Where does the cost model come from?**
 The caller. Both the review/error costs and token prices are inputs — nothing
 is hard-coded — because a hard-coded price is stale the day it ships and a
-hard-coded cost ratio smuggles a business decision into library code.
+hard-coded cost ratio smuggles a business decision into library code. Inputs
+must be finite and non-negative; unjudgeable or incomplete records route to
+review rather than becoming free auto-accepts.
 
 ## Vocabulary to use precisely
 
@@ -112,9 +114,11 @@ hard-coded cost ratio smuggles a business decision into library code.
 
 - No production accuracy, calibration, latency, or cost figure exists — no
   real Bedrock call has been made.
-- The evaluation layer is not deployed anywhere and does not run in the
-  Lambda path; the SAM template and runtime handlers are untouched.
-- The PII guard is a structural backstop, not a DLP; the safety policy is
-  PII-free inputs by construction.
+- The evaluation layer does not run in the Lambda path and is excluded from
+  both built Lambda artifacts. The SAM template and runtime handlers remain
+  unchanged; only the bounded packaging helper changed.
+- The record allow-list and PII/credential/content guards are structural
+  backstops, not enterprise DLP; inputs still require approved upstream
+  de-identification.
 - Model-reported confidence remains uncalibrated until real labeled data
   says otherwise.

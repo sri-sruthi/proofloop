@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from decimal import Decimal, InvalidOperation
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 
 from proofloop.evaluation.calibration import (
     CalibrationTable,
@@ -30,8 +30,8 @@ from proofloop.evaluation.metrics import (
     field_match_results,
     invoice_exact_match,
     latency_summary,
+    numeric_prediction_parse_availability_rate,
     numeric_error_results,
-    schema_valid_rate,
     token_summary,
 )
 from proofloop.evaluation.normalization import canonical_decimal_string
@@ -57,9 +57,11 @@ _COST_DISCLAIMER = (
 
 def _parse_price(value: str) -> str:
     try:
-        Decimal(value)
+        parsed = Decimal(value)
     except InvalidOperation as error:
         raise ValueError(f"{value!r} is not a valid decimal price") from error
+    if not parsed.is_finite() or parsed < 0:
+        raise ValueError("token price must be a finite non-negative decimal")
     return value
 
 
@@ -83,8 +85,8 @@ class ReportConfig(EvaluationModel):
 
     tuning_split: EvaluationSplit = EvaluationSplit.DEVELOPMENT
     report_split: EvaluationSplit = EvaluationSplit.HOLDOUT
-    review_cost: Decimal | None = None
-    error_cost: Decimal | None = None
+    review_cost: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
+    error_cost: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     pricing: PricingConfig | None = None
     run_id: str | None = None
 
@@ -144,7 +146,7 @@ def _split_section(
         *field_match_results(records, normalized=True),
         invoice_exact_match(records),
         *numeric_error_results(records),
-        schema_valid_rate(records),
+        numeric_prediction_parse_availability_rate(records),
         brier_score(records),
         expected_calibration_error(records),
     )
@@ -244,6 +246,7 @@ def build_report(
     split_misuse = config.tuning_split == config.report_split
 
     provenances = {record.dataset_provenance for record in records}
+    has_judgeable_evidence = any(record.expected_fields for record in records)
     if not records:
         claim_boundary = "NO_DATA"
     elif provenances == {DatasetProvenance.SYNTHETIC}:
@@ -287,7 +290,7 @@ def build_report(
         "No model-superiority conclusion is supported by a single smoke "
         "request or by this offline dataset alone.",
     ]
-    if records:
+    if has_judgeable_evidence:
         supported.append(
             f"Deterministic metrics were computed over {len(records)} "
             "record(s); identical ordered records and configuration "
@@ -310,7 +313,7 @@ def build_report(
         )
 
     return EvaluationReport(
-        status="OK" if records else "INSUFFICIENT_EVIDENCE",
+        status=("OK" if has_judgeable_evidence else "INSUFFICIENT_EVIDENCE"),
         claim_boundary=claim_boundary,
         split_misuse=split_misuse,
         splits=sections,

@@ -9,7 +9,7 @@ PYPROJECT := $(PROJECT_ROOT)/pyproject.toml
 define build_runtime
 	@mkdir -p "$(ARTIFACTS_DIR)"
 	$(PYTHON) -c 'import subprocess, sys, tomllib; project = tomllib.load(open(sys.argv[1], "rb")); subprocess.check_call([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-compile", "--target", sys.argv[2], *project["project"]["dependencies"]])' "$(PYPROJECT)" "$(ARTIFACTS_DIR)"
-	cp -R "$(PROJECT_ROOT)/src/proofloop" "$(ARTIFACTS_DIR)/proofloop"
+	$(PYTHON) "$(PROJECT_ROOT)/infra/scripts/copy_runtime_package.py" "$(PROJECT_ROOT)/src/proofloop" "$(ARTIFACTS_DIR)/proofloop"
 endef
 
 build-ProofLoopApiFunction:

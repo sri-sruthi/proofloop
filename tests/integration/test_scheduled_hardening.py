@@ -8,6 +8,7 @@ import sys
 
 import pytest
 
+from infra.scripts.copy_runtime_package import copy_runtime_package
 from proofloop.infrastructure import scheduled_handler
 
 
@@ -200,7 +201,9 @@ def test_built_handler_verifier_loads_each_handler_from_its_artifact(
     artifact_paths: list[Path] = []
     for logical_id in ("ProofLoopApiFunction", "ProofLoopScheduledFunction"):
         artifact = tmp_path / logical_id
-        shutil.copytree(REPOSITORY_ROOT / "src" / "proofloop", artifact / "proofloop")
+        copy_runtime_package(
+            REPOSITORY_ROOT / "src" / "proofloop", artifact / "proofloop"
+        )
         artifact_paths.append(artifact)
 
     completed = subprocess.run(

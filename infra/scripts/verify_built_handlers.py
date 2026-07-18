@@ -23,17 +23,38 @@ def _inside(path: Path, directory: Path) -> bool:
     return True
 
 
+def verify_artifact_isolation(artifact: Path) -> None:
+    """Verify that a Lambda artifact contains runtime-only source."""
+
+    artifact = artifact.resolve()
+    prohibited: list[Path] = []
+    evaluation = artifact / "proofloop" / "evaluation"
+    if evaluation.exists():
+        prohibited.append(evaluation)
+    for path in artifact.rglob("*"):
+        if path.name == "__pycache__" or path.suffix in {".pyc", ".pyo"}:
+            prohibited.append(path)
+    if prohibited:
+        rendered = ", ".join(
+            str(path.relative_to(artifact)) for path in sorted(set(prohibited))
+        )
+        raise RuntimeError(f"prohibited Lambda artifact content: {rendered}")
+
+
 def verify_handler(artifact: Path, handler_spec: str) -> None:
     artifact = artifact.resolve()
     if not artifact.is_dir():
         raise RuntimeError(f"Lambda build artifact is missing: {artifact}")
+    verify_artifact_isolation(artifact)
     module_name, separator, attribute = handler_spec.partition(":")
     if not separator or not module_name or not attribute:
         raise RuntimeError(f"invalid handler specification: {handler_spec}")
 
     _clear_proofloop_modules()
     original_path = list(sys.path)
+    original_dont_write_bytecode = sys.dont_write_bytecode
     sys.path.insert(0, str(artifact))
+    sys.dont_write_bytecode = True
     try:
         module = importlib.import_module(module_name)
         handler = getattr(module, attribute, None)
@@ -61,7 +82,9 @@ def verify_handler(artifact: Path, handler_spec: str) -> None:
             )
     finally:
         sys.path[:] = original_path
+        sys.dont_write_bytecode = original_dont_write_bytecode
         _clear_proofloop_modules()
+    verify_artifact_isolation(artifact)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

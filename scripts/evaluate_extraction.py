@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Mapping
 
 from pydantic import ValidationError
 
@@ -88,9 +91,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _parse_decimal(raw: str, flag: str) -> Decimal:
     try:
-        return Decimal(raw)
+        value = Decimal(raw)
     except InvalidOperation as error:
         raise SafeCliError(f"{flag} must be a decimal number, got {raw!r}") from error
+    if not value.is_finite() or value < 0:
+        raise SafeCliError(f"{flag} must be a finite non-negative decimal")
+    return value
 
 
 def _load_dataset(path_text: str) -> EvaluationDataset:
@@ -141,14 +147,105 @@ def _build_config(args: argparse.Namespace) -> ReportConfig:
             message = error.errors()[0]["msg"]
             raise SafeCliError(f"invalid pricing: {message}") from error
 
-    return ReportConfig(
-        tuning_split=EvaluationSplit(args.tuning_split),
-        report_split=EvaluationSplit(args.report_split),
-        review_cost=review_cost,
-        error_cost=error_cost,
-        pricing=pricing,
-        run_id=args.run_id,
-    )
+    try:
+        return ReportConfig(
+            tuning_split=EvaluationSplit(args.tuning_split),
+            report_split=EvaluationSplit(args.report_split),
+            review_cost=review_cost,
+            error_cost=error_cost,
+            pricing=pricing,
+            run_id=args.run_id,
+        )
+    except ValidationError as error:
+        message = error.errors()[0]["msg"]
+        raise SafeCliError(f"invalid report configuration: {message}") from error
+
+
+def _temporary_output(target: Path, content: str) -> Path:
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+            return Path(handle.name)
+    except OSError as error:
+        raise SafeCliError(f"cannot prepare output file {target}: {error}") from error
+
+
+def _reserve_backup_path(target: Path) -> Path:
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".backup",
+            delete=False,
+        ) as handle:
+            backup = Path(handle.name)
+        backup.unlink()
+        return backup
+    except OSError as error:
+        raise SafeCliError(f"cannot prepare output backup {target}: {error}") from error
+
+
+def _publish_outputs(outputs: Mapping[Path, str]) -> None:
+    resolved: dict[Path, str] = {}
+    for target, content in outputs.items():
+        destination = target.resolve()
+        if destination in resolved:
+            raise SafeCliError("JSON and Markdown outputs must use different files")
+        if target.is_symlink():
+            raise SafeCliError(f"output target must not be a symbolic link: {target}")
+        if destination.exists() and not destination.is_file():
+            raise SafeCliError(f"output target must be a regular file: {target}")
+        if not destination.parent.is_dir():
+            raise SafeCliError(
+                f"output parent directory does not exist: {destination.parent}"
+            )
+        resolved[destination] = content
+
+    temporary: dict[Path, Path] = {}
+    backups: dict[Path, Path] = {}
+    published: set[Path] = set()
+    try:
+        for target, content in resolved.items():
+            temporary[target] = _temporary_output(target, content)
+        for target in resolved:
+            if target.exists():
+                backup = _reserve_backup_path(target)
+                os.replace(target, backup)
+                backups[target] = backup
+        for target, staged in temporary.items():
+            os.replace(staged, target)
+            published.add(target)
+    except (OSError, SafeCliError) as error:
+        restore_errors: list[str] = []
+        for target in published:
+            try:
+                target.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                restore_errors.append(str(cleanup_error))
+        for target, backup in backups.items():
+            try:
+                os.replace(backup, target)
+            except OSError as restore_error:
+                restore_errors.append(str(restore_error))
+        detail = f"output publication failed: {error}"
+        if restore_errors:
+            detail += "; rollback also failed"
+        raise SafeCliError(detail) from error
+    finally:
+        for path in (*temporary.values(), *backups.values()):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -164,10 +261,16 @@ def main(argv: list[str] | None = None) -> int:
     json_text = report_to_json(report)
     markdown_text = report_to_markdown(report)
 
+    outputs: dict[Path, str] = {}
     if args.json_out:
-        Path(args.json_out).write_text(json_text, encoding="utf-8")
+        outputs[Path(args.json_out)] = json_text
     if args.markdown_out:
-        Path(args.markdown_out).write_text(markdown_text, encoding="utf-8")
+        outputs[Path(args.markdown_out)] = markdown_text
+    try:
+        _publish_outputs(outputs)
+    except SafeCliError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
     if not args.json_out and not args.markdown_out:
         sys.stdout.write(json_text)
     else:

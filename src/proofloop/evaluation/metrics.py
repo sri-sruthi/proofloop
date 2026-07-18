@@ -1,4 +1,4 @@
-"""Deterministic match, numeric-error, schema-rate, and summary metrics.
+"""Deterministic match, numeric-error, parseability, and summary metrics.
 
 Every result declares its numerator, denominator, sample count, missing-value
 counts, sufficiency, and limitations. A zero denominator yields value None and
@@ -290,32 +290,42 @@ def numeric_error_results(
     return tuple(results)
 
 
-def schema_valid_rate(
+def numeric_prediction_parse_availability_rate(
     records: tuple[EvaluationRecord, ...],
 ) -> MetricResult:
-    """Share of records whose predicted numeric fields all parse."""
+    """Share with every expected numeric prediction present and parseable."""
 
     numerator = 0
+    denominator = 0
+    excluded_missing = 0
     for record in records:
+        expected_numeric_fields = tuple(
+            name for name in record.expected_fields if name in NUMERIC_FIELD_NAMES
+        )
+        if not expected_numeric_fields:
+            excluded_missing += 1
+            continue
+        denominator += 1
         valid = all(
-            parse_amount(value) is not None
-            for name, value in record.predicted_fields.items()
-            if name in NUMERIC_FIELD_NAMES
+            name in record.predicted_fields
+            and parse_amount(record.predicted_fields[name]) is not None
+            for name in expected_numeric_fields
         )
         if valid:
             numerator += 1
-    denominator = len(records)
     return MetricResult(
-        metric_id="schema_valid_rate",
+        metric_id="numeric_prediction_parse_availability_rate",
         kind=MetricKind.DESCRIPTIVE,
         numerator=str(numerator),
         denominator=str(denominator),
         value=_ratio(numerator, denominator),
         sample_count=len(records),
+        excluded_missing=excluded_missing,
         sufficiency=_sufficiency(denominator),
         limitations=(
-            "Validity here means numeric parseability under the documented "
-            "conservative parsing policy.",
+            "This measures availability and conservative parseability only; "
+            "it is not extraction-schema validation.",
+            "Records with no expected numeric field are excluded and counted.",
         ),
     )
 

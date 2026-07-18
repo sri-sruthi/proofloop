@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 
+import pytest
+from pydantic import ValidationError
+
 from proofloop.evaluation.records import DatasetProvenance, EvaluationSplit
 from proofloop.evaluation.report import (
     PricingConfig,
@@ -41,6 +44,13 @@ def test_empty_dataset_returns_insufficient_evidence_and_no_metrics() -> None:
     report = build_report(make_dataset(), _config())
     assert report.status == "INSUFFICIENT_EVIDENCE"
     assert report.splits == ()
+
+
+def test_wholly_unjudgeable_dataset_has_no_supported_conclusion() -> None:
+    dataset = make_dataset(make_record(expected_fields={}, predicted_fields={}))
+    report = build_report(dataset, _config())
+    assert report.status == "INSUFFICIENT_EVIDENCE"
+    assert report.supported_claims == ()
 
 
 def test_all_synthetic_data_blocks_production_accuracy_claims() -> None:
@@ -137,3 +147,27 @@ def test_cost_sweep_requires_caller_costs_and_is_omitted_without_them() -> None:
         _config(review_cost=Decimal("1"), error_cost=Decimal("10")),
     )
     assert with_costs.threshold_sweep is not None
+
+
+@pytest.mark.parametrize("invalid", ("-1", "NaN", "Infinity", "-Infinity"))
+def test_report_config_rejects_negative_or_non_finite_costs(invalid: str) -> None:
+    with pytest.raises(ValidationError, match="finite|greater than or equal"):
+        _config(review_cost=Decimal(invalid), error_cost=Decimal("1"))
+    with pytest.raises(ValidationError, match="finite|greater than or equal"):
+        _config(review_cost=Decimal("1"), error_cost=Decimal(invalid))
+
+
+@pytest.mark.parametrize("invalid", ("-1", "NaN", "Infinity", "-Infinity"))
+def test_pricing_rejects_negative_or_non_finite_values(invalid: str) -> None:
+    with pytest.raises(ValidationError, match="finite non-negative"):
+        PricingConfig(
+            input_token_price_per_1k=invalid,
+            output_token_price_per_1k="1",
+            currency="USD",
+        )
+    with pytest.raises(ValidationError, match="finite non-negative"):
+        PricingConfig(
+            input_token_price_per_1k="1",
+            output_token_price_per_1k=invalid,
+            currency="USD",
+        )

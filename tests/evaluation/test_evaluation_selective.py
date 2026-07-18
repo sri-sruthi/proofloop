@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from proofloop.evaluation.calibration import (
     selective_risk_table,
     threshold_cost_sweep,
@@ -88,8 +90,60 @@ def test_cost_sweep_is_labeled_decision_support_not_a_verdict() -> None:
     assert "verdict" in sweep.disclaimer.lower()
 
 
+def test_unjudgeable_or_incomplete_records_always_route_to_review() -> None:
+    unjudgeable = make_record(
+        dataset_record_id="u1",
+        expected_fields={},
+        predicted_fields={},
+        model_reported_confidence=1.0,
+    )
+    incomplete = make_record(
+        dataset_record_id="u2",
+        expected_fields={"invoice_number": "INV-1001", "total": "10.00"},
+        predicted_fields={"invoice_number": "INV-1001"},
+        model_reported_confidence=1.0,
+    )
+    sweep = threshold_cost_sweep(
+        (unjudgeable, incomplete),
+        review_cost=Decimal("1"),
+        error_cost=Decimal("10"),
+        thresholds=(Decimal("0"),),
+    )
+    row = _row(sweep, "0")
+    assert row.auto_accepted == 0
+    assert row.routed_to_review == 2
+    assert row.wrong_auto_accepts == 0
+    assert row.expected_cost_per_invoice == "1"
+
+
 def test_empty_records_produce_an_empty_table_not_a_crash() -> None:
     table = selective_risk_table((), thresholds=(Decimal("0.5"),))
     row = _row(table, "0.5")
     assert row.covered == 0
     assert row.coverage is None
+
+
+@pytest.mark.parametrize("invalid", ("-1", "NaN", "Infinity", "-Infinity"))
+def test_cost_sweep_rejects_negative_or_non_finite_costs(invalid: str) -> None:
+    with pytest.raises(ValueError, match="finite non-negative"):
+        threshold_cost_sweep(
+            _records(),
+            review_cost=Decimal(invalid),
+            error_cost=Decimal("1"),
+        )
+    with pytest.raises(ValueError, match="finite non-negative"):
+        threshold_cost_sweep(
+            _records(),
+            review_cost=Decimal("1"),
+            error_cost=Decimal(invalid),
+        )
+
+
+def test_cost_sweep_accepts_zero_costs() -> None:
+    sweep = threshold_cost_sweep(
+        _records(),
+        review_cost=Decimal("0"),
+        error_cost=Decimal("0"),
+        thresholds=(Decimal("0.5"),),
+    )
+    assert sweep.rows[0].expected_cost_per_invoice == "0"

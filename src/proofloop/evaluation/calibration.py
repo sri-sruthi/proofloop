@@ -313,7 +313,11 @@ def threshold_cost_sweep(
     price. Records below threshold (or without confidence) route to review.
     """
 
-    scored: list[tuple[Decimal | None, bool | None]] = [
+    for label, value in (("review_cost", review_cost), ("error_cost", error_cost)):
+        if not value.is_finite() or value < 0:
+            raise ValueError(f"{label} must be a finite non-negative Decimal")
+
+    scored: list[tuple[Decimal | None, bool | None, bool]] = [
         (
             (
                 Decimal(str(record.model_reported_confidence))
@@ -321,6 +325,10 @@ def threshold_cost_sweep(
                 else None
             ),
             invoice_is_correct(record),
+            bool(record.expected_fields)
+            and all(
+                name in record.predicted_fields for name in record.expected_fields
+            ),
         )
         for record in records
     ]
@@ -330,8 +338,10 @@ def threshold_cost_sweep(
         auto_accepted = 0
         wrong_auto_accepts = 0
         routed_to_review = 0
-        for confidence, correct in scored:
-            if confidence is not None and confidence >= threshold:
+        for confidence, correct, decision_eligible in scored:
+            if not decision_eligible:
+                routed_to_review += 1
+            elif confidence is not None and confidence >= threshold:
                 auto_accepted += 1
                 if correct is False:
                     wrong_auto_accepts += 1
