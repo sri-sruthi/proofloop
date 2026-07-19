@@ -65,20 +65,33 @@ one has zero permission to call Bedrock, so the always-on loop literally
 can't generate model cost. Ten CloudWatch alarms, two dead-letter queues,
 nothing fails without someone finding out."
 
-## 3:30–4:20 — Deterministic verdict, real Bedrock call
+## 3:30–4:10 — A real scenario, start to finish
+
+**SCREEN:** Optional — show a synthetic invoice snippet or the extracted
+JSON output alongside the diagram, if you have it handy.
+
+**SAY:** "Let me make that concrete with an actual case. Say an invoice
+comes in — vendor's Acme Supplies, invoice INV-9, two line items, totaling
+$105. That text hits redaction first. Then Bedrock pulls out the structured
+fields: vendor, amount, line items. Separately, deterministic code checks
+that against the purchase order on file — same vendor, same amount, so it
+reconciles and gets accepted for the next step. If something didn't match,
+or confidence was low, it would go to a human instead of just sliding
+through. That's not hypothetical, by the way — it's the exact invoice I
+used for the real Bedrock call this whole demo is built on."
+
+## 4:10–5:00 — Deterministic verdict, real Bedrock call
 
 **SCREEN:** Show the AI/assurance data-flow diagram.
 
-**SAY:** "The model's job is narrow — read untrusted text, output a strict
-schema, that's it. It never grades its own work. A separate deterministic
-function decides GREEN, AMBER, or RED. And we've actually proven the model
-call is real: an authenticated request triggered a live Bedrock Converse
-call using Mistral's Ministral model, wrote real evidence to DynamoDB. What
-that proves is connectivity and contract compatibility — it's not an
-accuracy claim, and I want to be upfront about that distinction. Accuracy
-at scale needs an actual eval set, which I'll get to."
+**SAY:** "The model's job in all of that was narrow — read untrusted text,
+output a strict schema, nothing else. It never grades its own work. A
+separate deterministic function decides GREEN, AMBER, or RED. To be upfront
+about what that invoice example actually proves: connectivity and contract
+compatibility. It's not an accuracy claim — accuracy at scale needs a real
+eval set, which I'll get to."
 
-## 4:20–5:10 — AMBER, RED, and why recovery is strict
+## 5:00–5:45 — AMBER, RED, and why recovery is strict
 
 **SCREEN:** Show the state/remediation diagram.
 
@@ -89,7 +102,7 @@ GREEN. You need fresh passing evidence, observed *after* the fix, before it
 trusts you again. Because a fix can be wrong, or stale, or just never
 actually deployed — so the system assumes that until it sees otherwise."
 
-## 5:10–6:00 — Security, reliability, cost
+## 5:45–6:30 — Security, reliability, cost
 
 **SAY:** "A few things worth calling out plainly. The API key here is a
 development boundary, not production auth — I'm not pretending otherwise.
@@ -101,7 +114,7 @@ of silently dropped. And cost-wise, it's all pay-per-use serverless, hard
 caps on model calls and tokens — the only real fixed cost is about a dollar
 a month in alarms."
 
-## 6:00–6:45 — Where data science fits, and where it doesn't
+## 6:30–7:10 — Where data science fits, and where it doesn't
 
 **SCREEN:** Show the control/data/evaluation-planes diagram.
 
@@ -113,27 +126,26 @@ data only, so I'm not making any production accuracy claim — that
 discipline's the point. Confidence scores can inform a human decision about
 thresholds. They don't get to declare anything GREEN themselves."
 
-## 6:45–7:20 — Why this, and not just existing monitoring
+## 7:10–7:40 — Why this, and not just existing monitoring
 
 **SAY:** "Config dashboards and general observability can tell you a
 service is up. They don't bind one proof to one requirement, and they
-don't refuse to show green without current evidence. That's really the
-whole contribution here — a small, deterministic layer for the failure
-mode that's otherwise invisible: a control that's configured right but has
-quietly stopped working. It complements what teams already have. It's not
-trying to replace their monitoring stack."
+don't refuse to show green without current evidence. That's the whole
+contribution here — a small, deterministic layer for the one failure mode
+that's otherwise invisible: a control that's configured right but has
+quietly stopped working. It complements existing monitoring, not replaces
+it."
 
-## 7:20–8:00 — Limitations and close
+## 7:40–8:00 — Limitations and close
 
-**SAY:** "And to be honest about where this stands — it's a controlled
+**SAY:** "To be honest about where this stands — it's a controlled
 development deployment, not enterprise production. One shared API key, not
-per-user identity. The business tools, purchase orders and vendor lookups,
-are in-memory fixtures, not a real ERP. No load testing, no multi-region.
-The evaluation layer makes no production accuracy claim, full stop. All of
-that's written down, not hidden. What is real: a live, hosted system with
-an actual model call, a five-minute assurance loop that's been running for
-hours straight, and a verdict you can go check yourself, right now, at the
-link on screen."
+per-user identity. The business tools are in-memory fixtures, not a real
+ERP. No load testing, no multi-region. The evaluation layer makes no
+production accuracy claim, full stop — that's written down, not hidden.
+What is real: a live, hosted system with an actual model call, a
+five-minute assurance loop that's been running for hours, and a verdict
+you can go check yourself, right now, at the link on screen."
 
 ---
 
@@ -144,10 +156,11 @@ link on screen."
 | 0:00 | Terminal — `python scripts/demo_proofloop.py` |
 | 1:35 | Browser — `https://d1xanj4sg0mmpg.cloudfront.net`, load record, show GREEN + transition log |
 | 2:35 | AWS deployment diagram |
-| 3:30 | AI/assurance data-flow diagram |
-| 4:20 | State/remediation diagram |
-| 6:00 | Control/data/evaluation-planes diagram |
-| 7:20 | Back to the live dashboard URL for the close |
+| 3:30 | (optional) synthetic invoice / extracted JSON snippet |
+| 4:10 | AI/assurance data-flow diagram |
+| 5:00 | State/remediation diagram |
+| 6:30 | Control/data/evaluation-planes diagram |
+| 7:40 | Back to the live dashboard URL for the close |
 
 **Do not show on screen at any point:** the API key value, AWS account ID,
 MFA device details, IAM role ARNs, login URLs, or any raw invoice/prompt/model
