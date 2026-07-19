@@ -39,8 +39,18 @@ _MAX_TRANSITION_COMMIT_ATTEMPTS = 4
 class DynamoProofLoopStore:
     """Single-table implementation of all ProofLoop application repositories."""
 
-    def __init__(self, table: Any) -> None:
+    def __init__(self, table: Any, *, transact_client: Any | None = None) -> None:
         self._table = table
+        # TransactWriteItems sends already-encoded DynamoDB JSON, so it must use a
+        # transform-free low-level client. A boto3 *resource* client
+        # (``table.meta.client``) re-applies the resource serialization transform
+        # and double-encodes each value — the String key ``{"S": ...}`` becomes a
+        # Map ``{"M": {"S": ...}}`` and DynamoDB rejects it with a PK type
+        # mismatch. Default to the table's own client so hand-written test fakes
+        # (which do not apply that transform) keep working.
+        self._transact_client = (
+            transact_client if transact_client is not None else table.meta.client
+        )
 
     @overload
     def add(self, definition_or_scope: AgentDefinition) -> bool: ...
@@ -103,7 +113,7 @@ class DynamoProofLoopStore:
             canonical_evidence_id=evidence.evidence_id,
         )
         try:
-            self._table.meta.client.transact_write_items(
+            self._transact_client.transact_write_items(
                 TransactItems=(
                     {
                         "Put": {
@@ -312,7 +322,7 @@ class DynamoProofLoopStore:
                 }
             )
         try:
-            self._table.meta.client.transact_write_items(
+            self._transact_client.transact_write_items(
                 TransactItems=operations,
             )
             return True
@@ -338,7 +348,7 @@ class DynamoProofLoopStore:
                 ttl=int(value.expires_at.timestamp()),
             )
             try:
-                self._table.meta.client.transact_write_items(
+                self._transact_client.transact_write_items(
                     TransactItems=(
                         self._revision_put_operation(
                             value.scope,

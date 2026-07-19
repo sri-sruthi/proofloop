@@ -365,3 +365,33 @@ def test_same_clock_transitions_keep_commit_order_and_amber_sla_start() -> None:
         if item["record_type"] == "STATE_REVISION"
     )
     assert revision["revision"] == "5"
+
+
+class _RecordingTransactClient:
+    """Transform-free low-level client: records transactions and asserts items
+    arrive raw-encoded (a resource client would double-encode PK into a Map)."""
+
+    def __init__(self, table: "FakeTable") -> None:
+        self._table = table
+        self.calls = 0
+
+    def transact_write_items(self, *, TransactItems):
+        self.calls += 1
+        for operation in TransactItems:
+            pk = operation["Put"]["Item"]["PK"]
+            assert set(pk) == {"S"}, f"PK must stay a raw String value, got {pk}"
+        return self._table.meta.client.transact_write_items(TransactItems=TransactItems)
+
+
+def test_transactions_route_through_the_injected_transform_free_client() -> None:
+    # Regression: TransactWriteItems must not go through the boto3 resource client
+    # (table.meta.client), which re-serializes already-encoded items and turns the
+    # String PK into a Map that DynamoDB rejects with a PK type mismatch. The store
+    # must use the injected transform-free low-level client instead.
+    table = FakeTable()
+    raw = _RecordingTransactClient(table)
+    store = DynamoProofLoopStore(table, transact_client=raw)
+    agent = make_agent()
+    store.add(agent)
+    store.add(agent.scope, make_evidence(agent, "pii-redaction"))
+    assert raw.calls >= 1

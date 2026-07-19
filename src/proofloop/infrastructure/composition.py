@@ -296,14 +296,18 @@ def _store_from_environment() -> Any:
     table_name = os.environ.get("PROOFLOOP_EVIDENCE_TABLE_NAME")
     if not table_name:
         return InMemoryProofLoopStore()
-    import boto3  # type: ignore[import-not-found]  # Lambda runtime dependency
+    import boto3  # type: ignore[import-not-found,import-untyped]  # Lambda runtime dep
 
     table = boto3.resource("dynamodb").Table(table_name)
-    return DynamoProofLoopStore(table)
+    # A transform-free low-level client for TransactWriteItems: the resource
+    # client (table.meta.client) re-serializes already-encoded transaction items
+    # and double-encodes the keys, which DynamoDB rejects as a PK type mismatch.
+    transact_client = boto3.client("dynamodb")
+    return DynamoProofLoopStore(table, transact_client=transact_client)
 
 
 def _bedrock_runtime_client(region: str, *, timeout_seconds: float) -> Any:
-    import boto3  # type: ignore[import-not-found]  # Lambda runtime dependency
+    import boto3  # type: ignore[import-not-found,import-untyped]  # Lambda runtime dep
     from botocore.config import Config  # type: ignore[import-not-found,import-untyped]
 
     return boto3.client(
