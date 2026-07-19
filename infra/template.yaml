@@ -136,7 +136,7 @@ Resources:
     Properties:
       StageName: $default
       AccessLogSettings:
-        DestinationArn: !GetAtt ProofLoopHttpApiAccessLogGroup.Arn
+        DestinationArn: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/${AWS::StackName}-proofloop:*"
         Format: >-
           {"requestId":"$context.requestId","ip":"$context.identity.sourceIp",
           "requestTime":"$context.requestTime","httpMethod":"$context.httpMethod",
@@ -210,7 +210,7 @@ Resources:
               Action:
                 - logs:CreateLogStream
                 - logs:PutLogEvents
-              Resource: !Sub "${ProofLoopApiLogGroup.Arn}:*"
+              Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-proofloop-api:*"
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
@@ -277,7 +277,7 @@ Resources:
               Action:
                 - logs:CreateLogStream
                 - logs:PutLogEvents
-              Resource: !Sub "${ProofLoopScheduledLogGroup.Arn}:*"
+              Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-proofloop-reconciliation:*"
       Events:
         FiveMinuteReconciliation:
           Type: Schedule

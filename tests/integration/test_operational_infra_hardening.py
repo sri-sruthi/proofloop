@@ -262,6 +262,28 @@ def test_credential_free_validator_rejects_operational_guardrail_drift(
     assert expected_issue in completed.stderr
 
 
+def test_log_group_arns_avoid_getatt_so_service_role_needs_no_describe() -> None:
+    # `!GetAtt <LogGroup>.Arn` forces CloudFormation to resolve the ARN through
+    # logs:DescribeLogGroups at deploy time. The controlled-development
+    # CloudFormation service role intentionally does not grant that permission,
+    # so every log-group ARN is constructed explicitly from the stack name and
+    # pseudo-parameters instead.
+    for logical_id in (
+        "ProofLoopApiLogGroup",
+        "ProofLoopScheduledLogGroup",
+        "ProofLoopHttpApiAccessLogGroup",
+    ):
+        assert f"{logical_id}.Arn" not in TEMPLATE, (
+            f"{logical_id}.Arn GetAtt requires logs:DescribeLogGroups; "
+            "construct the log-group ARN explicitly instead"
+        )
+    explicit_arn = (
+        "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:"
+    )
+    # API access-log destination plus both Lambda log-write resources.
+    assert TEMPLATE.count(explicit_arn) >= 3
+
+
 def test_assurance_boundary_is_required_parameterized_and_not_hard_coded() -> None:
     parameter = _block("AssuranceBoundaryId")
 
