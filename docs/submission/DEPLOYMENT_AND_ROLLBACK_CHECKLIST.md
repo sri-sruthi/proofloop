@@ -1,17 +1,16 @@
 # ProofLoop Post-Activation Deployment and Rollback Checklist
 
-**Status:** G1.5 is offline-reviewed and the approved G1.6 infrastructure
-hardening and its private CI gate are complete but deliberately **not
-executed**. Python 3.13, SAM, the strictly private Git baseline, and private
-Python 3.12/3.13 CI pass for G1.6 commit `4ae391e`; G2 remains separately gated
-before the final non-executed change set.  
-**Account fact:** payment verification is complete and Lambda is accessible in
-`ap-south-1`, as stated by the product owner; no Track G1.5 AWS call verified
-the account or region.  
-**Trigger order:** G1.6 local/private CI is complete. Next, separately authorize
-G2 read-only AWS preflight and, only after its inputs are resolved, one
-non-executed change set. Execution and real-model smoke require later, distinct
-approval.  
+**Status:** controlled-development deployment completed and observed on
+2026-07-20. Local Python 3.13, private Python 3.12/3.13 CI, SAM lint/build, and
+the current 409-test suite pass. CloudFormation is `UPDATE_COMPLETE`; health
+is 200; unauthenticated access is 401; an authenticated synthetic invoice made
+one real Bedrock call, persisted four evidence receipts and reached GREEN.  
+**Schedule state:** default remains `false` for a fresh deployment. After the
+successful smoke, the reviewed update set the parameter to `true` and the real
+EventBridge rule to `ENABLED`. The rule is now explicit infrastructure as code,
+not SAM Schedule shorthand.  
+**Boundary:** this is a controlled development/demo deployment, not a
+production-readiness, load, cost, customer-data, or extraction-accuracy claim.
 **Rule:** a checked box requires captured evidence; do not infer success from
 template or workflow-file presence.
 
@@ -114,8 +113,8 @@ Record these in the release ticket before any command runs.
 - [x] The complete local and private Python 3.12/3.13 CI/SAM gate passes again
   after G1.6; no AWS preflight or change-set creation begins before it does.
 
-Detailed design and classification:
-`codex/handovers/FINAL_AWS_EXECUTION_READINESS_REVIEW.md`.
+The reviewed design and classification are reflected in this checklist and the
+infrastructure template.
 
 ## 3. Read-only account and model preflight
 
@@ -167,8 +166,8 @@ node --check dashboard/app.js
 - [x] Every application command exits zero; exact versions and counts are
   recorded in the G1.6 handoff.
 - [x] Import-isolation, secret and dangerous-code scans pass.
-- [x] Only approved Codex-owned infrastructure/tests/docs/CI files differ from
-  the G1.6 branch baseline.
+- [x] Only approved infrastructure, tests, documentation and CI files differ
+  from the G1.6 branch baseline.
 
 ## 5. SAM validation and target build
 

@@ -79,7 +79,7 @@ incident data.
 | Check | Command boundary | Result |
 |---|---|---|
 | Dependency integrity | isolated `python -m pip check` | PASS: no broken requirements |
-| Full test suite | isolated `python -m pytest -q` | PASS: **266 passed in 3.01s** under pytest 9.1.1 |
+| Full test suite | isolated `python -m pytest -q` | PASS: **414 passed** under pytest 9.1.1 (current gate) |
 | Type checking | isolated `python -m mypy src/proofloop tests` | PASS: no issues in 88 source files |
 | Ruff, CI scope | `python -m ruff check src tests` | PASS: all checks passed |
 | Ruff, extended scope | `python -m ruff check src tests scripts infra/scripts` | PASS: all checks passed |
@@ -105,19 +105,19 @@ incident data.
 
 ### RUFF-01 - closed by authorized owners
 
-- Claude removed the unused `ExtractedInvoice` import from the agent workflow.
-- Codex replaced both assigned lambdas in `infrastructure/composition.py` with
+- An unused `ExtractedInvoice` import was removed from the agent workflow.
+- The two assigned lambdas in `infrastructure/composition.py` were replaced with
   typed named functions while preserving branch-local captures and a fresh
   Bedrock provider per request.
 - Focused factory-name tests failed on `<lambda>` before the repair and passed
   afterward. Full Ruff exits zero.
 
-Track E2 did not edit the Claude-owned workflow file.
+Track E2 preserved the agent-workflow ownership boundary.
 
 ### BANDIT-01 - closed by authorized owners
 
-Both `PASS = "PASS"` serialization contracts remain unchanged. Claude and Codex
-added documented `# nosec B105` annotations only on their respective enum
+Both `PASS = "PASS"` serialization contracts remain unchanged. Documented
+`# nosec B105` annotations were added only on the respective enum
 member lines. No global Bandit rule was disabled; the full command exits zero.
 
 ### AUDIT-01 - closed after pytest 9 compatibility validation
@@ -144,7 +144,7 @@ vulnerabilities.
 
 The worktree has no Git baseline commit: branch `main`, no `git log`, and the
 repository tree appears untracked. Consequently Git cannot prove a Track E2
-diff against a baseline. Track E2 changed only its authorized Codex-owned code,
+diff against a baseline. Track E2 changed only its authorized code,
 tests, dependency declaration and release documentation. No commit, push,
 branch, repository or cloud resource was created.
 

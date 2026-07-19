@@ -2,8 +2,9 @@
 
 **Duration:** 6-8 minutes  
 **Mode:** local-only, fake model, synthetic data  
-**Status:** implemented; local Python 3.13, private Python 3.12/3.13 CI, and SAM
-package gates pass; AWS deployment and real Bedrock remain unexecuted
+**Status:** local Python 3.13, private Python 3.12/3.13 CI, SAM gates, and a
+controlled-development AWS smoke pass. The deployed API completed one real
+Bedrock-backed GREEN workflow with synthetic non-customer data.
 
 ## 30-45 second working demo - show this first
 
@@ -29,8 +30,10 @@ Use this compact narration while the command runs:
 > restores GREEN. The transition history and incident are recorded without a
 > cloud account, customer data, or a model call.
 
-This is a deterministic local working demo, not AWS telemetry. After it
-finishes, continue into the fuller architecture/API/dashboard narrative below.
+This is a deterministic local working demo, not AWS telemetry. Separately, the
+deployed API Gateway/Lambda/Bedrock/DynamoDB path was observed with synthetic
+non-customer data and resulted in GREEN. Continue into the fuller
+architecture/API/dashboard narrative below.
 
 ## Safety preflight
 
@@ -39,7 +42,8 @@ Before recording:
 - use only reserved synthetic invoice text;
 - keep the API key in the shell and masked browser field; never narrate, print,
   paste into slides, or record it;
-- do not run the Bedrock smoke script or any AWS/SAM deployment command;
+- do not run an AWS deployment command during recording; do not reveal a private
+  endpoint, API key, account identifier, customer payload or model output;
 - do not show request bodies, prompts, model output, raw/redacted invoice text,
   tool payloads, environment dumps, or hidden reasoning;
 - keep `docs/submission/MANUAL_QA_EVIDENCE.md` available for exact test counts
@@ -104,7 +108,8 @@ Run the 30-45 second demonstration above and show the complete state sequence.
 > treating missing data as success.
 
 State the honest boundary: local vertical slice, deterministic fake model,
-synthetic data, no AWS deployment and no real Bedrock call.
+synthetic data. The recorded local sequence is distinct from the separately
+observed deployed Bedrock smoke; do not present local output as live telemetry.
 
 ### 1:20-2:05 - architecture
 
@@ -149,6 +154,11 @@ and load the prefilled boundary. Point to:
 
 Clear the saved key before leaving the page or capturing a screenshot.
 
+For the controlled-development deployment evidence, use the separately saved
+sanitized capture at
+`docs/submission/evidence/proofloop_dashboard_deployed_green.png`. It was
+loaded from the deployed backend, while its endpoint and API key are not shown.
+
 ### 3:55-5:20 - deterministic failures and recovery
 
 Run:
@@ -182,7 +192,7 @@ describe either script as live AWS telemetry.
 
 Open `docs/submission/MANUAL_QA_EVIDENCE.md` and state:
 
-- 266 tests passed under pytest 9.1.1;
+- 414 tests passed under pytest 9.1.1;
 - mypy, Ruff, Bandit, strict dependency audit, compileall, both demos, the
   template validator, source imports, dashboard syntax, privacy tests and
   isolation/secret scans passed;
@@ -194,13 +204,14 @@ Open `docs/submission/MANUAL_QA_EVIDENCE.md` and state:
 Close with the current boundary:
 
 - RUFF-01, BANDIT-01 and AUDIT-01 are closed by their authorized owners;
-- the clean local Python 3.13 gate passes with pytest 9.1.1 and 266 tests;
+- the clean local Python 3.13 gate passes with pytest 9.1.1 and 414 tests;
 - private GitHub Actions passes on Python 3.12 and native ARM64 Python 3.13;
 - local and CI SAM validation/build and both built-handler imports pass;
 - the allowed-origin injection, schedule activation, and essential alarm
   findings remain accepted pre-change-set infrastructure blockers;
 - AWS identity/model preflight, a CloudFormation change set, deployment, smoke,
-  alarm validation, rollback, and real Bedrock were not executed;
+  full alarm-notification delivery, rollback exercise and production-scale
+  validation remain unexecuted;
 - AWS account activation and Mumbai Lambda availability are product-owner
   attested facts, not deployment evidence from this run.
 
