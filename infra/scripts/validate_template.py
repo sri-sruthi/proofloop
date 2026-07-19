@@ -198,6 +198,20 @@ def _validate_parameters(lines: Sequence[str], issues: list[str]) -> None:
     )
     if _direct_values(allowed_origin, "Default", 4):
         issues.append("AllowedOrigin must not define a default")
+    assurance_boundary = _find_block(lines, "AssuranceBoundaryId", 2, issues)
+    _expect_value(
+        assurance_boundary, "Type", 4, "String", issues, "AssuranceBoundaryId"
+    )
+    _expect_value(
+        assurance_boundary,
+        "AllowedPattern",
+        4,
+        "'^[a-z0-9]+(-[a-z0-9]+)*$'",
+        issues,
+        "AssuranceBoundaryId",
+    )
+    if _direct_values(assurance_boundary, "Default", 4):
+        issues.append("AssuranceBoundaryId must not define a default")
     schedule_enabled = _find_block(
         lines, "EnableReconciliationSchedule", 2, issues
     )
@@ -352,6 +366,14 @@ def _validate_functions(lines: Sequence[str], issues: list[str]) -> None:
         _expect_value(function, "Handler", 6, handler, issues, logical_id)
         _expect_value(function, "Runtime", 6, "python3.13", issues, logical_id)
         _expect_value(function, "LogFormat", 8, "JSON", issues, logical_id)
+        _expect_value(
+            function,
+            "PROOFLOOP_DEMO_BOUNDARY_ID",
+            10,
+            "!Ref AssuranceBoundaryId",
+            issues,
+            logical_id,
+        )
         if function.count("                - dynamodb:TransactWriteItems") != 1:
             issues.append(f"{logical_id} requires dynamodb:TransactWriteItems")
         resources = _direct_values(function, "Resource", 14)
@@ -615,6 +637,11 @@ def validate_template(path: Path) -> list[str]:
         issues,
         "template",
     )
+    if "proofloop-demo-development-invoices" in "\n".join(lines):
+        issues.append(
+            "template must not hard-code the assurance boundary "
+            "proofloop-demo-development-invoices; inject !Ref AssuranceBoundaryId"
+        )
     _validate_parameters(lines, issues)
     _validate_schedule_condition(lines, issues)
     _validate_table(lines, issues)

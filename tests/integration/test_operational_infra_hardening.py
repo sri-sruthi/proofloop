@@ -260,3 +260,59 @@ def test_credential_free_validator_rejects_operational_guardrail_drift(
 
     assert completed.returncode == 1
     assert expected_issue in completed.stderr
+
+
+def test_assurance_boundary_is_required_parameterized_and_not_hard_coded() -> None:
+    parameter = _block("AssuranceBoundaryId")
+
+    assert "    Type: String" in parameter
+    assert "    Default:" not in parameter
+    pattern = _parameter_pattern("AssuranceBoundaryId")
+    assert re.fullmatch(pattern, "proofloop-demo-dev-invoices")
+    assert not re.fullmatch(pattern, "*")
+    assert not re.fullmatch(pattern, "")
+
+    for function in ("ProofLoopApiFunction", "ProofLoopScheduledFunction"):
+        assert (
+            "PROOFLOOP_DEMO_BOUNDARY_ID: !Ref AssuranceBoundaryId"
+            in _block(function)
+        ), f"{function} must inject the AssuranceBoundaryId parameter"
+
+    # The previously hard-coded wrong boundary must be absent everywhere so a
+    # deployment can never silently certify a different customer boundary.
+    assert "proofloop-demo-development-invoices" not in TEMPLATE
+
+
+def test_deployment_readme_passes_the_approved_assurance_boundary() -> None:
+    readme = (REPOSITORY_ROOT / "infra" / "README.md").read_text(encoding="utf-8")
+    assert "AssuranceBoundaryId=proofloop-demo-dev-invoices" in readme
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement", "expected_issue"),
+    (
+        (
+            "PROOFLOOP_DEMO_BOUNDARY_ID: !Ref AssuranceBoundaryId",
+            "PROOFLOOP_DEMO_BOUNDARY_ID: proofloop-demo-development-invoices",
+            "PROOFLOOP_DEMO_BOUNDARY_ID",
+        ),
+        (
+            "PROOFLOOP_DEMO_BOUNDARY_ID: !Ref AssuranceBoundaryId",
+            'PROOFLOOP_DEMO_BOUNDARY_ID: ""',
+            "PROOFLOOP_DEMO_BOUNDARY_ID",
+        ),
+    ),
+)
+def test_credential_free_validator_rejects_assurance_boundary_drift(
+    tmp_path: Path,
+    original: str,
+    replacement: str,
+    expected_issue: str,
+) -> None:
+    assert original in TEMPLATE
+    bad_template = TEMPLATE.replace(original, replacement, 1)
+
+    completed = _run_validator(tmp_path, bad_template)
+
+    assert completed.returncode == 1
+    assert expected_issue in completed.stderr

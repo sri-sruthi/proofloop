@@ -104,6 +104,14 @@ HTTP(S) origin and rejects `*`. The approved controlled-demo value is
 `http://localhost:8000`. The SAM stack hosts no dashboard: deploy and smoke the
 backend first, then serve the existing dashboard locally.
 
+`AssuranceBoundaryId` is required and has no default. It is injected as
+`PROOFLOOP_DEMO_BOUNDARY_ID` into both Lambda functions and identifies the exact
+assurance boundary this deployment is authorized to certify. There is no
+hard-coded boundary in the template, so a deployment can never silently certify
+a different customer boundary; the constraint rejects wildcards and blank
+values. The approved controlled-development value is
+`proofloop-demo-dev-invoices`.
+
 `EnableReconciliationSchedule` accepts only `true` or `false` and defaults to
 `false`. Keep it false for the first deployment. Enabling it starts recurring
 Lambda, DynamoDB, EventBridge, log, and possible failure-path operations, so it
@@ -204,6 +212,7 @@ sam deploy --guided --template-file .aws-sam/build/template.yaml \
   --parameter-overrides \
     "ApiKey=$PROOFLOOP_API_KEY" \
     "AllowedOrigin=http://localhost:8000" \
+    "AssuranceBoundaryId=proofloop-demo-dev-invoices" \
     "EnableReconciliationSchedule=false" \
     "AlarmNotificationEmail=$PROOFLOOP_ALARM_EMAIL" \
     "BedrockModelId=$PROOFLOOP_BEDROCK_MODEL_ID" \

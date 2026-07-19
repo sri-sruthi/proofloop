@@ -42,7 +42,12 @@ Record these in the release ticket before any command runs.
 - [ ] **Tenant ID:** `________________`.
 - [ ] **Environment:** `DEVELOPMENT`, `STAGING`, or approved alternative:
   `________________`.
-- [ ] **Assurance-boundary ID:** `________________`.
+- [x] **Assurance-boundary ID:** required CloudFormation parameter
+  `AssuranceBoundaryId` (no default, no wildcard/blank); injected into both
+  Lambda functions as `PROOFLOOP_DEMO_BOUNDARY_ID`. Approved
+  controlled-development value: `proofloop-demo-dev-invoices`. The template no
+  longer hard-codes any boundary, so a deployment cannot silently certify the
+  wrong customer boundary.
 - [ ] **Monthly budget and thresholds:** amount `________`; notification
   recipients `________________`; anomaly and hard-stop policy `________________`.
 - [x] **CloudWatch/log policy:** 30-day retention is approved. The product owner

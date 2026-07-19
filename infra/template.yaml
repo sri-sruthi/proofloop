@@ -13,6 +13,11 @@ Parameters:
     AllowedPattern: '^https?://[^*\s]+$'
     ConstraintDescription: Must be one explicit HTTP(S) origin without a wildcard.
     Description: Required exact browser origin allowed by the ProofLoop API.
+  AssuranceBoundaryId:
+    Type: String
+    AllowedPattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+    ConstraintDescription: Must be one explicit lowercase assurance-boundary id (letters, digits, single hyphens) with no wildcard or blank value.
+    Description: Required exact assurance boundary this deployment is authorized to certify. No default, so a deployment can never silently certify the wrong customer boundary.
   EnableReconciliationSchedule:
     Type: String
     Default: "false"
@@ -185,7 +190,7 @@ Resources:
           PROOFLOOP_MODEL_TIMEOUT_SECONDS: !Ref ModelTimeoutSeconds
           PROOFLOOP_SEED_SAFE_CANARY: "true"
           PROOFLOOP_DEMO_ENVIRONMENT: DEVELOPMENT
-          PROOFLOOP_DEMO_BOUNDARY_ID: proofloop-demo-development-invoices
+          PROOFLOOP_DEMO_BOUNDARY_ID: !Ref AssuranceBoundaryId
           POWERTOOLS_SERVICE_NAME: proofloop-api
       LoggingConfig:
         LogFormat: JSON
@@ -242,7 +247,7 @@ Resources:
           PROOFLOOP_MODEL_VERSION: !Ref BedrockModelId
           PROOFLOOP_SEED_SAFE_CANARY: "true"
           PROOFLOOP_DEMO_ENVIRONMENT: DEVELOPMENT
-          PROOFLOOP_DEMO_BOUNDARY_ID: proofloop-demo-development-invoices
+          PROOFLOOP_DEMO_BOUNDARY_ID: !Ref AssuranceBoundaryId
           POWERTOOLS_SERVICE_NAME: proofloop-reconciliation
       LoggingConfig:
         LogFormat: JSON
