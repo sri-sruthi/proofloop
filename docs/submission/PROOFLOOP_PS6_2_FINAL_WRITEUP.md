@@ -361,7 +361,7 @@ assurance would defeat its purpose.
 ## 18. Reproducibility and teardown
 
 The complete source, tests, infrastructure templates, and deployment/teardown
-scripts are included in the reviewer package. A reviewer with their own AWS
+scripts are included in the submission package. Anyone with their own AWS
 account can: install dependencies (`pip install -e ".[dev]"`), run the full
 test suite (`pytest`), run the local demo (`python scripts/demo_proofloop.py`),
 validate and build the SAM template, and deploy both the backend
