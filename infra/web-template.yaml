@@ -1,0 +1,196 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  ProofLoop controlled-development dashboard hosted through CloudFront with a
+  private encrypted S3 origin.
+
+Parameters:
+  ApiBaseUrl:
+    Type: String
+    AllowedPattern: '^https://[^*\s]+$'
+    ConstraintDescription: Must be one explicit HTTPS API origin without a wildcard.
+    Description: Public ProofLoop API origin written to runtime-config.js.
+
+Resources:
+  ProofLoopDashboardBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Service
+          Value: ProofLoop
+        - Key: DataClass
+          Value: PublicDashboardAssets
+
+  ProofLoopDashboardOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Description: Signed CloudFront access to the private ProofLoop dashboard bucket.
+        Name: !Sub "${AWS::StackName}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  ProofLoopDashboardStaticCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub "${AWS::StackName}-static-cache"
+        Comment: Short conservative cache for versionless dashboard assets.
+        DefaultTTL: 300
+        MinTTL: 0
+        MaxTTL: 86400
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: none
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+
+  ProofLoopDashboardNoCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub "${AWS::StackName}-runtime-no-cache"
+        Comment: Never cache the public runtime API-origin configuration.
+        DefaultTTL: 0
+        MinTTL: 0
+        MaxTTL: 0
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: none
+          EnableAcceptEncodingBrotli: false
+          EnableAcceptEncodingGzip: false
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+
+  ProofLoopDashboardResponseHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub "${AWS::StackName}-security-headers"
+        Comment: Browser security boundary for the ProofLoop assurance dashboard.
+        SecurityHeadersConfig:
+          ContentSecurityPolicy:
+            ContentSecurityPolicy: !Sub >-
+              default-src 'self'; connect-src 'self' ${ApiBaseUrl};
+              img-src 'self' data:; style-src 'self'; script-src 'self';
+              object-src 'none'; base-uri 'none'; frame-ancestors 'none';
+              form-action 'self'
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 31536000
+            IncludeSubdomains: true
+            Preload: false
+            Override: true
+          XSSProtection:
+            Protection: true
+            ModeBlock: true
+            Override: true
+
+  ProofLoopDashboardDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: ProofLoop controlled-development assurance dashboard
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          CachePolicyId: !Ref ProofLoopDashboardStaticCachePolicy
+          Compress: true
+          ResponseHeadersPolicyId: !Ref ProofLoopDashboardResponseHeadersPolicy
+          TargetOriginId: ProofLoopDashboardPrivateS3
+          ViewerProtocolPolicy: redirect-to-https
+        CacheBehaviors:
+          - PathPattern: runtime-config.js
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            CachedMethods:
+              - GET
+              - HEAD
+            CachePolicyId: !Ref ProofLoopDashboardNoCachePolicy
+            Compress: true
+            ResponseHeadersPolicyId: !Ref ProofLoopDashboardResponseHeadersPolicy
+            TargetOriginId: ProofLoopDashboardPrivateS3
+            ViewerProtocolPolicy: redirect-to-https
+        DefaultRootObject: index.html
+        Enabled: true
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        Origins:
+          - DomainName: !GetAtt ProofLoopDashboardBucket.RegionalDomainName
+            Id: ProofLoopDashboardPrivateS3
+            OriginAccessControlId: !Ref ProofLoopDashboardOriginAccessControl
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+          MinimumProtocolVersion: TLSv1.2_2021
+      Tags:
+        - Key: Service
+          Value: ProofLoop
+        - Key: Environment
+          Value: DEVELOPMENT
+
+  ProofLoopDashboardBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ProofLoopDashboardBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontReadOnly
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${ProofLoopDashboardBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub >-
+                  arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${ProofLoopDashboardDistribution}
+
+Outputs:
+  DashboardUrl:
+    Description: Public HTTPS URL for the ProofLoop dashboard.
+    Value: !Sub "https://${ProofLoopDashboardDistribution.DomainName}"
+  DashboardBucketName:
+    Description: Private origin bucket used by the deployment and teardown scripts.
+    Value: !Ref ProofLoopDashboardBucket
+  DashboardDistributionId:
+    Description: CloudFront distribution used by the deployment script.
+    Value: !Ref ProofLoopDashboardDistribution

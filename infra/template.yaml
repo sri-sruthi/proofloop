@@ -283,19 +283,51 @@ Resources:
                 - logs:CreateLogStream
                 - logs:PutLogEvents
               Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-proofloop-reconciliation:*"
-      Events:
-        FiveMinuteReconciliation:
-          Type: Schedule
-          Properties:
-            Schedule: rate(5 minutes)
-            Enabled: !If [ReconciliationScheduleEnabled, true, false]
-            Input: '{"source":"proofloop.reconciliation"}'
-            RetryPolicy:
-              MaximumEventAgeInSeconds: 300
-              MaximumRetryAttempts: 2
-            DeadLetterConfig:
-              Type: SQS
-              QueueLogicalId: ProofLoopScheduledDeadLetterQueue
+  # Do not use SAM's Schedule-event Enabled property here: SAM transformed the
+  # intrinsic condition into an enabled rule. An explicit Events rule preserves
+  # the deployment parameter as the runtime State on every stack update.
+  ProofLoopScheduledDeadLetterQueue:
+    Type: AWS::SQS::Queue
+
+  ProofLoopScheduledFunctionFiveMinuteReconciliation:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: rate(5 minutes)
+      State: !If [ReconciliationScheduleEnabled, ENABLED, DISABLED]
+      Targets:
+        - Arn: !GetAtt ProofLoopScheduledFunction.Arn
+          Id: ProofLoopScheduledFunctionFiveMinuteReconciliationLambdaTarget
+          Input: '{"source":"proofloop.reconciliation"}'
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 300
+            MaximumRetryAttempts: 2
+          DeadLetterConfig:
+            Arn: !GetAtt ProofLoopScheduledDeadLetterQueue.Arn
+
+  ProofLoopScheduledFunctionFiveMinuteReconciliationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ProofLoopScheduledFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ProofLoopScheduledFunctionFiveMinuteReconciliation.Arn
+
+  ProofLoopScheduledFunctionFiveMinuteReconciliationQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ProofLoopScheduledDeadLetterQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt ProofLoopScheduledDeadLetterQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ProofLoopScheduledFunctionFiveMinuteReconciliation.Arn
 
   ProofLoopApiErrorsAlarm:
     Type: AWS::CloudWatch::Alarm

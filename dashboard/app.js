@@ -7,6 +7,8 @@
   const connectButton = document.querySelector("#connect-button");
   const messageRegion = document.querySelector("#message-region");
   const apiKeyInput = document.querySelector("#api-key");
+  const apiBaseInput = document.querySelector("#api-base");
+  const runtimeConfig = window.PROOFLOOP_RUNTIME_CONFIG || {};
   const elements = {
     status: document.querySelector("[data-status]"), freshness: document.querySelector("#freshness-chip"),
     summary: document.querySelector("#status-summary"), updated: document.querySelector("#last-updated"),
@@ -19,6 +21,13 @@
   };
 
   apiKeyInput.value = sessionStorage.getItem(KEY_STORAGE) || "";
+  if (typeof runtimeConfig.apiBaseUrl === "string" && runtimeConfig.apiBaseUrl) {
+    apiBaseInput.value = runtimeConfig.apiBaseUrl;
+    if (runtimeConfig.apiBaseUrl.startsWith("https://")) {
+      document.querySelector("#environment").value = "DEVELOPMENT";
+      document.querySelector("#boundary-id").value = "proofloop-demo-dev-invoices";
+    }
+  }
 
   function text(value, fallback = "—") {
     return value === null || value === undefined || value === "" ? fallback : String(value);

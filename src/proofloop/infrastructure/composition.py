@@ -161,6 +161,9 @@ def build_invoice_runner(
         provider_config = BedrockProviderConfig(
             model_id=model_id,
             provider_id=model_version,
+            structured_output_schema=_EXTRACTED_INVOICE_OUTPUT_SCHEMA,
+            structured_output_name="extracted_invoice",
+            structured_output_description="Strict ProofLoop extracted invoice contract.",
         )
 
         def bedrock_provider_factory(_request: InvoiceRunRequest) -> ModelProvider:
@@ -379,3 +382,50 @@ def _env_flag(name: str, *, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+_EXTRACTED_INVOICE_OUTPUT_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "document_id",
+        "vendor_name",
+        "invoice_number",
+        "invoice_date",
+        "currency",
+        "line_items",
+        "subtotal",
+        "tax",
+        "total",
+        "status",
+        "warnings",
+    ],
+    "properties": {
+        "document_id": {"type": "string"},
+        "vendor_name": {"type": "string"},
+        "vendor_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "invoice_number": {"type": "string"},
+        "invoice_date": {"type": "string", "format": "date-time"},
+        "po_number": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "currency": {"type": "string"},
+        "line_items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["description", "quantity", "unit_price", "tax", "line_total"],
+                "properties": {
+                    "description": {"type": "string"},
+                    "quantity": {"type": "number"},
+                    "unit_price": {"type": "number"},
+                    "tax": {"type": "number"},
+                    "line_total": {"type": "number"},
+                },
+            },
+        },
+        "subtotal": {"type": "number"},
+        "tax": {"type": "number"},
+        "total": {"type": "number"},
+        "status": {"type": "string", "enum": ["COMPLETE", "PARTIAL"]},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "model_reported_confidence": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+    },
+}

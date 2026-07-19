@@ -115,6 +115,45 @@ def test_request_separates_trusted_system_from_untrusted_user_message() -> None:
     assert poison not in sent["system"][0]["text"]
 
 
+def test_request_adds_native_json_schema_only_when_configured() -> None:
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"document_id": {"type": "string"}},
+        "required": ["document_id"],
+    }
+    config = BedrockProviderConfig(
+        model_id="mistral.ministral-3-3b-instruct",
+        structured_output_schema=schema,
+        structured_output_name="extracted_invoice",
+        structured_output_description="Strict invoice contract.",
+    )
+    client = _StubBedrockClient(response=_converse_response("{}"))
+
+    BedrockConverseProvider(client=client, config=config).generate_structured(_request())
+
+    assert client.calls[0]["outputConfig"] == {
+        "textFormat": {
+            "type": "json_schema",
+            "structure": {
+                "jsonSchema": {
+                    "name": "extracted_invoice",
+                    "description": "Strict invoice contract.",
+                    "schema": '{"additionalProperties":false,"properties":{"document_id":{"type":"string"}},"required":["document_id"],"type":"object"}',
+                }
+            },
+        }
+    }
+
+
+def test_request_omits_native_json_schema_by_default() -> None:
+    client = _StubBedrockClient(response=_converse_response("{}"))
+
+    BedrockConverseProvider(client=client, config=CONFIG).generate_structured(_request())
+
+    assert "outputConfig" not in client.calls[0]
+
+
 def test_max_tokens_stop_reason_maps_to_max_tokens() -> None:
     client = _StubBedrockClient(response=_converse_response("...", stop_reason="max_tokens"))
     provider = BedrockConverseProvider(client=client, config=CONFIG)

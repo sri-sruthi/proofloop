@@ -64,19 +64,19 @@ def test_scheduled_handler_attempts_every_scope_then_raises_without_secrets(
     assert "event-private-payload" not in caplog.text
 
 
-def test_schedule_has_bounded_retry_and_sam_managed_sqs_dlq() -> None:
+def test_schedule_has_bounded_retry_and_explicit_sqs_dlq() -> None:
     template = (REPOSITORY_ROOT / "infra" / "template.yaml").read_text(
         encoding="utf-8"
     )
-    scheduled = template.split("  ProofLoopScheduledFunction:", 1)[1].split(
-        "\nOutputs:", 1
-    )[0]
+    rule = template.split(
+        "  ProofLoopScheduledFunctionFiveMinuteReconciliation:", 1
+    )[1].split("\n  ProofLoopScheduledFunctionFiveMinuteReconciliationPermission:", 1)[0]
 
-    assert "MaximumEventAgeInSeconds: 300" in scheduled
-    assert "MaximumRetryAttempts: 2" in scheduled
-    assert "DeadLetterConfig:" in scheduled
-    assert "Type: SQS" in scheduled
-    assert "QueueLogicalId: ProofLoopScheduledDeadLetterQueue" in scheduled
+    assert "MaximumEventAgeInSeconds: 300" in rule
+    assert "MaximumRetryAttempts: 2" in rule
+    assert "DeadLetterConfig:" in rule
+    assert "Arn: !GetAtt ProofLoopScheduledDeadLetterQueue.Arn" in rule
+    assert "State: !If [ReconciliationScheduleEnabled, ENABLED, DISABLED]" in rule
     assert "sqs:*" not in template
     assert "Resource: \"*\"" not in template
 
@@ -86,15 +86,22 @@ def test_lambda_async_failures_have_bounded_retries_and_failure_destination() ->
         encoding="utf-8"
     )
     scheduled = template.split("  ProofLoopScheduledFunction:", 1)[1].split(
-        "\nOutputs:", 1
+        "  ProofLoopScheduledFunctionFiveMinuteReconciliation:", 1
     )[0]
 
     assert "EventInvokeConfig:" in scheduled
-    assert scheduled.count("MaximumEventAgeInSeconds: 300") == 2
-    assert scheduled.count("MaximumRetryAttempts: 2") == 2
+    rule = template.split(
+        "  ProofLoopScheduledFunctionFiveMinuteReconciliation:", 1
+    )[1].split("\n  ProofLoopScheduledFunctionFiveMinuteReconciliationPermission:", 1)[0]
+
+    assert scheduled.count("MaximumEventAgeInSeconds: 300") == 1
+    assert scheduled.count("MaximumRetryAttempts: 2") == 1
+    assert rule.count("MaximumEventAgeInSeconds: 300") == 1
+    assert rule.count("MaximumRetryAttempts: 2") == 1
     assert "DestinationConfig:" in scheduled
     assert "OnFailure:" in scheduled
-    assert scheduled.count("Type: SQS") == 2
+    assert scheduled.count("Type: SQS") == 1
+    assert "AWS::SQS::QueuePolicy" in template
 
 
 def test_both_lambda_roles_can_commit_dynamodb_transactions() -> None:

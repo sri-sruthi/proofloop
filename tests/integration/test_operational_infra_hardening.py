@@ -85,10 +85,22 @@ def test_reconciliation_schedule_is_explicit_and_disabled_by_default() -> None:
     assert "!Equals" in condition
     assert "!Ref EnableReconciliationSchedule" in condition
     assert '    - "true"' in condition
-    assert (
-        "Enabled: !If [ReconciliationScheduleEnabled, true, false]"
-        in _block("ProofLoopScheduledFunction")
-    )
+    scheduled_function = _block("ProofLoopScheduledFunction")
+    assert "Events:" not in scheduled_function
+    rule = _block("ProofLoopScheduledFunctionFiveMinuteReconciliation")
+    assert "Type: AWS::Events::Rule" in rule
+    assert "ScheduleExpression: rate(5 minutes)" in rule
+    assert "State: !If [ReconciliationScheduleEnabled, ENABLED, DISABLED]" in rule
+    assert "Id: ProofLoopScheduledFunctionFiveMinuteReconciliationLambdaTarget" in rule
+    assert "Arn: !GetAtt ProofLoopScheduledFunction.Arn" in rule
+    assert "Arn: !GetAtt ProofLoopScheduledDeadLetterQueue.Arn" in rule
+    permission = _block("ProofLoopScheduledFunctionFiveMinuteReconciliationPermission")
+    assert "Type: AWS::Lambda::Permission" in permission
+    assert "Principal: events.amazonaws.com" in permission
+    assert "SourceArn: !GetAtt ProofLoopScheduledFunctionFiveMinuteReconciliation.Arn" in permission
+    queue_policy = _block("ProofLoopScheduledFunctionFiveMinuteReconciliationQueuePolicy")
+    assert "Type: AWS::SQS::QueuePolicy" in queue_policy
+    assert "Service: events.amazonaws.com" in queue_policy
 
 
 def test_table_lifecycle_is_explicit_for_controlled_development() -> None:

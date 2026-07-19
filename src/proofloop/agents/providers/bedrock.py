@@ -19,6 +19,7 @@ when a caller injects a real client and invokes ``generate_structured``.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, Mapping, Protocol, runtime_checkable
@@ -57,6 +58,9 @@ class BedrockProviderConfig:
     model_id: str
     provider_id: str = "bedrock-converse"
     additional_model_request_fields: Mapping[str, Any] | None = None
+    structured_output_schema: Mapping[str, Any] | None = None
+    structured_output_name: str = "structured_response"
+    structured_output_description: str = "Validated structured response."
 
 
 # Bedrock stop reasons -> vendor-neutral stop reasons. Unknown/tool_use reasons
@@ -146,6 +150,26 @@ class BedrockConverseProvider:
             kwargs["additionalModelRequestFields"] = dict(
                 self.config.additional_model_request_fields
             )
+        if self.config.structured_output_schema is not None:
+            # Converse structured output is a top-level API contract, not an
+            # provider-specific additional request field. Canonical JSON makes
+            # the exact contract deterministic and easy to regression-test.
+            kwargs["outputConfig"] = {
+                "textFormat": {
+                    "type": "json_schema",
+                    "structure": {
+                        "jsonSchema": {
+                            "name": self.config.structured_output_name,
+                            "description": self.config.structured_output_description,
+                            "schema": json.dumps(
+                                self.config.structured_output_schema,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                        }
+                    },
+                }
+            }
         return kwargs
 
     def generate_structured(

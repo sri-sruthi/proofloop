@@ -453,57 +453,99 @@ def _validate_schedule(lines: Sequence[str], issues: list[str]) -> None:
         issues,
         "ProofLoopScheduledFunction.EventInvokeConfig.OnFailure",
     )
-    event = _find_block(scheduled_function, "FiveMinuteReconciliation", 8, issues)
-    _expect_value(event, "Type", 10, "Schedule", issues, "FiveMinuteReconciliation")
+    if "      Events:" in scheduled_function:
+        issues.append("ProofLoopScheduledFunction must not use SAM Schedule shorthand")
+    event = _find_block(
+        lines, "ProofLoopScheduledFunctionFiveMinuteReconciliation", 2, issues
+    )
     _expect_value(
         event,
-        "Schedule",
-        12,
+        "Type",
+        4,
+        "AWS::Events::Rule",
+        issues,
+        "ProofLoopScheduledFunctionFiveMinuteReconciliation",
+    )
+    _expect_value(
+        event,
+        "ScheduleExpression",
+        6,
         "rate(5 minutes)",
         issues,
-        "FiveMinuteReconciliation",
+        "ProofLoopScheduledFunctionFiveMinuteReconciliation",
     )
     _expect_value(
         event,
-        "Enabled",
-        12,
-        "!If [ReconciliationScheduleEnabled, true, false]",
+        "State",
+        6,
+        "!If [ReconciliationScheduleEnabled, ENABLED, DISABLED]",
         issues,
-        "FiveMinuteReconciliation",
+        "ProofLoopScheduledFunctionFiveMinuteReconciliation",
     )
-    retry = _find_block(event, "RetryPolicy", 12, issues)
+    _expect_sequence(
+        event,
+        (
+            "        - Arn: !GetAtt ProofLoopScheduledFunction.Arn",
+            "          Id: ProofLoopScheduledFunctionFiveMinuteReconciliationLambdaTarget",
+        ),
+        issues,
+        "ProofLoopScheduledFunctionFiveMinuteReconciliation requires its Lambda target",
+    )
+    retry = _find_block(event, "RetryPolicy", 10, issues)
     _expect_value(
         retry,
         "MaximumEventAgeInSeconds",
-        14,
+        12,
         "300",
         issues,
-        "FiveMinuteReconciliation.RetryPolicy",
+        "ProofLoopScheduledFunctionFiveMinuteReconciliation.RetryPolicy",
     )
     _expect_value(
         retry,
         "MaximumRetryAttempts",
-        14,
+        12,
         "2",
         issues,
-        "FiveMinuteReconciliation.RetryPolicy",
+        "ProofLoopScheduledFunctionFiveMinuteReconciliation.RetryPolicy",
     )
-    dead_letter = _find_block(event, "DeadLetterConfig", 12, issues)
+    dead_letter = _find_block(event, "DeadLetterConfig", 10, issues)
     _expect_value(
         dead_letter,
+        "Arn",
+        12,
+        "!GetAtt ProofLoopScheduledDeadLetterQueue.Arn",
+        issues,
+        "ProofLoopScheduledFunctionFiveMinuteReconciliation.DeadLetterConfig",
+    )
+    permission = _find_block(
+        lines, "ProofLoopScheduledFunctionFiveMinuteReconciliationPermission", 2, issues
+    )
+    _expect_value(
+        permission,
         "Type",
-        14,
-        "SQS",
+        4,
+        "AWS::Lambda::Permission",
         issues,
-        "FiveMinuteReconciliation.DeadLetterConfig",
+        "ProofLoopScheduledFunctionFiveMinuteReconciliationPermission",
     )
     _expect_value(
-        dead_letter,
-        "QueueLogicalId",
-        14,
-        "ProofLoopScheduledDeadLetterQueue",
+        permission,
+        "SourceArn",
+        6,
+        "!GetAtt ProofLoopScheduledFunctionFiveMinuteReconciliation.Arn",
         issues,
-        "FiveMinuteReconciliation.DeadLetterConfig",
+        "ProofLoopScheduledFunctionFiveMinuteReconciliationPermission",
+    )
+    queue_policy = _find_block(
+        lines, "ProofLoopScheduledFunctionFiveMinuteReconciliationQueuePolicy", 2, issues
+    )
+    _expect_value(
+        queue_policy,
+        "Type",
+        4,
+        "AWS::SQS::QueuePolicy",
+        issues,
+        "ProofLoopScheduledFunctionFiveMinuteReconciliationQueuePolicy",
     )
 
 
