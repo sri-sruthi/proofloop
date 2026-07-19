@@ -172,7 +172,11 @@ Resources:
         - arm64
       MemorySize: 256
       Timeout: 45
-      ReservedConcurrentExecutions: 5
+      # Reserved concurrency is intentionally omitted for this controlled
+      # development account: its total Lambda concurrency is ~10, and AWS
+      # requires at least 10 to remain unreserved, so any reservation is
+      # rejected. Restore a per-function reservation after a concurrency-limit
+      # increase for a production deployment.
       Environment:
         Variables:
           PROOFLOOP_API_KEY: !Ref ApiKey
@@ -238,7 +242,8 @@ Resources:
         - arm64
       MemorySize: 256
       Timeout: 30
-      ReservedConcurrentExecutions: 1
+      # Reserved concurrency omitted on this ~10-concurrency development
+      # account (see the API function above); restore for production.
       Environment:
         Variables:
           PROOFLOOP_EVIDENCE_TABLE_NAME: !Ref ProofLoopEvidenceTable
