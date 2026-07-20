@@ -110,23 +110,23 @@ with runtime assurance:
 
 ### 4.1 System context
 
-![System context](diagrams/1_system_context.png)
+![System context](diagrams/01-system-context.png)
 
 ### 4.2 AWS deployment
 
-![AWS deployment architecture](diagrams/2_aws_deployment.png)
+![AWS deployment architecture](diagrams/02-aws-deployment.png)
 
 ### 4.3 AI and assurance data flow
 
-![AI and assurance data flow](diagrams/3_ai_assurance_data_flow.png)
+![AI and assurance data flow](diagrams/03-ai-assurance-data-flow.png)
 
 ### 4.4 State and remediation flow
 
-![State and remediation flow](diagrams/4_state_remediation_flow.png)
+![State and remediation flow](diagrams/04-state-remediation-flow.png)
 
 ### 4.5 Control, data and evaluation planes
 
-![Control, data and evaluation planes](diagrams/5_control_data_evaluation_planes.png)
+![Control, data and evaluation planes](diagrams/05-control-data-evaluation-planes.png)
 
 <!--pagebreak-->
 
@@ -222,7 +222,7 @@ next sync. See diagram §4.4.
   wildcard); the dashboard's API key lives only in browser session storage
   and is never present in any committed asset.
 
-![Live hosted dashboard, connected to the deployed API, showing GREEN with real evidence](evidence/proofloop_dashboard_live_browser_proof.png)
+![Live hosted dashboard, connected to the deployed API, showing GREEN with real evidence](screenshots/dashboard-live-browser-proof.png)
 
 ## 11. Privacy and security
 
