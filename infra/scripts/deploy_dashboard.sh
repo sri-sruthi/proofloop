@@ -62,8 +62,14 @@ dashboard_url=$(aws cloudformation describe-stacks \
   --query "Stacks[0].Outputs[?OutputKey=='DashboardUrl'].OutputValue | [0]" \
   --output text)
 
-python3 "$script_dir/render_dashboard_runtime_config.py" \
-  "$api_base_url" "$temporary_dir/runtime-config.js"
+render_args=("$api_base_url" "$temporary_dir/runtime-config.js")
+# Optional: embed a read-only demo key so evaluators connect in one click.
+# Provide it only at deploy time (never committed): PROOFLOOP_DEMO_API_KEY=... ./deploy_dashboard.sh ...
+if [[ -n "${PROOFLOOP_DEMO_API_KEY:-}" ]]; then
+  render_args+=(--demo-api-key "$PROOFLOOP_DEMO_API_KEY")
+fi
+
+python3 "$script_dir/render_dashboard_runtime_config.py" "${render_args[@]}"
 
 aws s3 sync "$dashboard_dir" "s3://$dashboard_bucket" \
   --profile "$aws_profile" --region "$aws_region" --delete \

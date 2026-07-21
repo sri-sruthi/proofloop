@@ -20,7 +20,10 @@
     timeline: document.querySelector("#timeline-list"), incidents: document.querySelector("#incident-list")
   };
 
-  apiKeyInput.value = sessionStorage.getItem(KEY_STORAGE) || "";
+  // An operator-entered key (session storage) always wins; otherwise fall back to
+  // the optional read-only demo key baked into the deployment so evaluators can
+  // load a record in one click. "Clear saved key" still empties the field.
+  apiKeyInput.value = sessionStorage.getItem(KEY_STORAGE) || runtimeConfig.demoApiKey || "";
   if (typeof runtimeConfig.apiBaseUrl === "string" && runtimeConfig.apiBaseUrl) {
     apiBaseInput.value = runtimeConfig.apiBaseUrl;
     if (runtimeConfig.apiBaseUrl.startsWith("https://")) {
