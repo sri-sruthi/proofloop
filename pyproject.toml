@@ -9,14 +9,20 @@ description = "Cloud-neutral runtime-to-compliance assurance platform for ProofL
 requires-python = ">=3.12,<3.14"
 dependencies = [
   "pydantic>=2.12,<3",
-  "mcp>=2,<3",
 ]
 
 [project.optional-dependencies]
+# The MCP tool integration is a local capability, not a Lambda runtime
+# dependency, so it is kept out of `dependencies` (which the Lambda build
+# installs). Install with `.[mcp]` to run the MCP demo/server.
+mcp = [
+  "mcp>=2,<3",
+]
 dev = [
   "pytest>=9.0.3,<10",
   "mypy>=1.11,<2",
-  "ruff>=0.8,<1",
+  "ruff>=0.8,<0.16",
+  "mcp>=2,<3",
 ]
 
 [tool.setuptools.packages.find]

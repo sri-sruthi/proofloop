@@ -147,8 +147,10 @@ class MCPToolClient:
         return future.result(timeout=self._call_timeout)
 
     async def _acall(self, name: str, arguments: dict[str, Any]) -> Any:
-        assert self._session is not None
-        result = await self._session.call_tool(name, arguments)
+        session = self._session
+        if session is None:
+            raise ToolError("MCP tool client is not connected")
+        result = await session.call_tool(name, arguments)
         return _payload(result)
 
     def list_tool_names(self) -> list[str]:
@@ -158,8 +160,10 @@ class MCPToolClient:
         return future.result(timeout=self._call_timeout)
 
     async def _alist(self) -> list[str]:
-        assert self._session is not None
-        listing = await self._session.list_tools()
+        session = self._session
+        if session is None:
+            raise ToolError("MCP tool client is not connected")
+        listing = await session.list_tools()
         return [tool.name for tool in listing.tools]
 
     # --- protocol adapters (satisfy the tool_specs Protocols) --------------

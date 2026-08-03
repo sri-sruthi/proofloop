@@ -133,7 +133,7 @@ def build_server() -> MCPServer:
             DuplicateQuery(
                 vendor_name=vendor_name,
                 invoice_number=invoice_number,
-                total=total,
+                total=Decimal(total),
             )
         )
         return result.model_dump(mode="json")

@@ -33,14 +33,14 @@ def test_server_exposes_four_tools_over_in_memory_mcp() -> None:
 
             found = await client.call_tool("get_purchase_order", {"po_number": "PO-1"})
             assert found.is_error is False
-            text = next(getattr(b, "text", None) for b in found.content)
-            assert '"po_number": "PO-1"' in text
-            assert '"total": "105.00"' in text  # exact decimal preserved as string
+            found_text = "".join(getattr(b, "text", "") for b in found.content)
+            assert '"po_number": "PO-1"' in found_text
+            assert '"total": "105.00"' in found_text  # exact decimal preserved as string
 
             missing = await client.call_tool(
                 "get_purchase_order", {"po_number": "PO-404"}
             )
-            missing_text = next(getattr(b, "text", None) for b in missing.content)
+            missing_text = "".join(getattr(b, "text", "") for b in missing.content)
             assert '"record": null' in missing_text
 
     asyncio.run(scenario())

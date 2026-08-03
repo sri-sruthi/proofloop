@@ -125,9 +125,16 @@ the absence of a payment tool. It prints no invoice or PII content.
 
 ## Run the invoice workflow through live MCP tools
 
-Launch the MCP tool server as a subprocess and run the real invoice workflow
-through it over the Model Context Protocol (offline fake model for extraction;
-every reconciliation tool call travels over MCP):
+The MCP integration is an optional extra (it is not a Lambda runtime
+dependency), so install it first:
+
+```bash
+python -m pip install -e ".[mcp]"
+```
+
+Then launch the MCP tool server as a subprocess and run the real invoice
+workflow through it over the Model Context Protocol (offline fake model for
+extraction; every reconciliation tool call travels over MCP):
 
 ```bash
 python scripts/demo_mcp_invoice.py
