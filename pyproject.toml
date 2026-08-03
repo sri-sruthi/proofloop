@@ -9,6 +9,7 @@ description = "Cloud-neutral runtime-to-compliance assurance platform for ProofL
 requires-python = ">=3.12,<3.14"
 dependencies = [
   "pydantic>=2.12,<3",
+  "mcp>=2,<3",
 ]
 
 [project.optional-dependencies]

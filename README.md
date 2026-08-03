@@ -123,6 +123,23 @@ malformed-model and tool failures, safe-canary RED, remediation-only AMBER,
 fresh post-repair GREEN, bounded token/call accounting, timeline/incidents, and
 the absence of a payment tool. It prints no invoice or PII content.
 
+## Run the invoice workflow through live MCP tools
+
+Launch the MCP tool server as a subprocess and run the real invoice workflow
+through it over the Model Context Protocol (offline fake model for extraction;
+every reconciliation tool call travels over MCP):
+
+```bash
+python scripts/demo_mcp_invoice.py
+```
+
+The MCP tool server can also be launched standalone (it speaks MCP over
+stdin/stdout, e.g. for an MCP host such as Claude Desktop):
+
+```bash
+python -m proofloop.agents.mcp.server
+```
+
 ## Run the local API and dashboard
 
 The supported Python range is `>=3.12,<3.14`. Install the project and development
@@ -313,8 +330,13 @@ NAT/VPC cost.
 - No raw or redacted invoice, prompt, model output, tool payload, observation
   reason, PII finding, or PII count is persisted or returned; evidence retains
   opaque references and approved booleans only.
-- The deterministic in-memory business tools are demonstration adapters. There
-  is no MCP runtime and no production finance-system integration.
+- A local MCP integration is included: `src/proofloop/agents/mcp/server.py`
+  exposes the four invoice tools over the Model Context Protocol (JSON-RPC over
+  stdio), and the reconciliation workflow can drive them through an MCP client
+  (`src/proofloop/agents/mcp/client.py`, `scripts/demo_mcp_invoice.py`,
+  `tests/agents/test_mcp_roundtrip.py`). The deployed AWS Lambda composition
+  still calls the in-memory business adapters directly — there is no MCP server
+  running inside Lambda — and there is no production finance-system integration.
 - FakeModelProvider and an injected Bedrock stub client remain regression-tested.
   In addition, one sanitized real Bedrock-backed smoke completed successfully;
   this is not an extraction-accuracy, latency, throughput, or load evaluation.
