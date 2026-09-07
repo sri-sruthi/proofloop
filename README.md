@@ -324,6 +324,3 @@ NAT/VPC cost.
   in-memory business adapters and is not connected to a production finance system.
 - The real Bedrock smoke proved integration, not production-scale accuracy,
   throughput, concurrency or resilience.
-
-See [`docs/PROOFLOOP_BUILD_AND_INTERVIEW_GUIDE.md`](docs/PROOFLOOP_BUILD_AND_INTERVIEW_GUIDE.md)
-for architecture decisions and production risks.
