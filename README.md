@@ -1,24 +1,23 @@
 # ProofLoop
 
-ProofLoop is a locally working, AWS-packageable implementation of **PS-6.2:
+ProofLoop is an AWS-deployable implementation of **PS-6.2:
 Runtime-to-Compliance Bridge**. It continuously reconciles runtime control
 evidence into an agent compliance record, while refusing to show GREEN unless
 every required control has fresh, correlated PASS evidence.
 
-**Current status (2026-07-20):** ProofLoop is deployed and live as a
-controlled-development stack in `ap-south-1`, with a public hosted dashboard:
+**Current status (2026-09-07):** The source is publicly available at
+<https://github.com/sri-sruthi/proofloop>. The controlled-development AWS
+deployment has been torn down, so there is currently no live API or hosted
+dashboard. Before teardown, the deployment was verified end to end in
+`ap-south-1`: HTTPS dashboard access, API-key rejection, one real Amazon
+Bedrock Converse structured-output extraction, DynamoDB evidence persistence,
+deterministic reconciliation, GREEN assurance, and scheduled EventBridge runs.
 
-**Hosted dashboard:** <https://d1xanj4sg0mmpg.cloudfront.net>
-
-Private CI, local Python 3.13, SAM lint/build, and the complete local test
-suite (414 tests, mypy clean on 107 source files) pass. A live browser
-session against the hosted dashboard confirms: HTTP health, API-key
-rejection, one real Bedrock Converse structured-output extraction,
-deterministic reconciliation, DynamoDB evidence receipts, and a resulting
-GREEN compliance state. The five-minute EventBridge reconciliation schedule
-is enabled and has run unattended for hours with dozens of consecutive
-successful cycles. This remains a controlled development/demo deployment,
-**not a production-readiness claim** — see [Important limitations](#important-limitations).
+The repository retains the reproducible SAM and CloudFront/S3 infrastructure,
+tests, offline demos and deployment/teardown instructions. The latest recorded
+gate ran 414 tests with Python 3.12/3.13 CI, mypy, Ruff, Bandit and SAM
+validation/build passing. Historical deployment evidence is not a claim that a
+live service or production environment exists today.
 
 ## What the slice proves
 
@@ -223,10 +222,10 @@ python infra/scripts/validate_template.py
 node --check dashboard/app.js
 ```
 
-The current private-CI gate records CPython 3.13.7 and pytest 9.1.1 locally
+The latest recorded CI gate used CPython 3.13.7 and pytest 9.1.1 locally
 with 414 tests, plus mypy, Ruff, Bandit, strict project dependency audit,
 compile/import, both demos, template validation and dashboard syntax passing.
-Private GitHub Actions runs pass on Python 3.12.13 (x64) and native
+GitHub Actions runs passed on Python 3.12.13 (x64) and native
 ARM64 Python 3.13.14, both running the full 414-test suite. SAM CLI 1.163.0 strictly validated
 the template and built both Lambda artifacts locally and on the ARM64 Linux
 job, and both built handlers imported successfully. The isolated SAM CLI itself
@@ -244,8 +243,7 @@ structured log groups. It now requires an exact non-wildcard `AllowedOrigin`,
 requires an alarm-notification email, creates a stack-managed SNS topic/email
 subscription, and defines ten five-minute development alarms. The schedule
 parameter defaults to disabled and is enabled only by a reviewed stack update
-after smoke checks; in this deployment it has since been enabled and is
-running. The evidence table deletes with the stack but is retained if an
+after smoke checks. The evidence table deletes with the stack but is retained if an
 update replaces it, which trades intentional development teardown for possible
 orphan-storage cost during replacement. The scheduled function refreshes the
 model-free schema canary before sync; SDK retries are disabled so hidden client
@@ -254,7 +252,7 @@ hosted dashboard, NAT Gateway, OpenSearch, EKS, ECS, or always-on compute — th
 dashboard is a separate, optional CloudFormation stack (`infra/web-template.yaml`,
 see below).
 
-The template passed the local/private Python 3.12/3.13 CI/SAM gate and the
+The template passed the Python 3.12/3.13 CI/SAM gate and the
 reviewed CloudFormation updates were executed through the deployment role. The
 schedule parameter is explicitly represented by an `AWS::Events::Rule` `State`,
 so a future reviewed update can reliably enable or disable it.
@@ -316,45 +314,16 @@ fixed monthly cost is the ten CloudWatch alarms (roughly USD 0.10 each at
 standard public rates). There is no reserved capacity, always-on compute, or
 NAT/VPC cost.
 
-## Important limitations
+## Current limitations
 
-- API-key authentication is intentionally minimal and is not a replacement for
-  production IAM, identity/authorization, rotation, throttling, or per-role
-  policy. It is a controlled development/demo boundary only.
-- DynamoDB behavior is contract-tested with a deterministic transactional table
-  fake; evidence/idempotency and compliance/timeline/incident mutations use
-  optimistic transactions. A per-agent monotonic aggregate revision orders
-  same-timestamp transitions and participates in the atomic state commit. These
-  paths have not been verified against a deployed table under throttling,
-  transaction cancellation, or high concurrency.
-- Registry discovery is a paginated GSI query rather than a full-table scan.
-  Per-agent reconciliation still reads that agent's retained eight-day evidence
-  prefix, so production needs quotas/backpressure and load-tested volume limits.
-- The local WSGI server is for demonstration, not production traffic.
-- The dashboard is a static, read-only client that never mutates compliance
-  state. It is hosted as a separate, optional CloudFormation stack
-  (CloudFront + private S3), not by the backend SAM stack.
-- No raw or redacted invoice, prompt, model output, tool payload, observation
-  reason, PII finding, or PII count is persisted or returned; evidence retains
-  opaque references and approved booleans only.
-- A local MCP integration is included: `src/proofloop/agents/mcp/server.py`
-  exposes the four invoice tools over the Model Context Protocol (JSON-RPC over
-  stdio), and the reconciliation workflow can drive them through an MCP client
-  (`src/proofloop/agents/mcp/client.py`, `scripts/demo_mcp_invoice.py`,
-  `tests/agents/test_mcp_roundtrip.py`). The deployed AWS Lambda composition
-  still calls the in-memory business adapters directly — there is no MCP server
-  running inside Lambda — and there is no production finance-system integration.
-- FakeModelProvider and an injected Bedrock stub client remain regression-tested.
-  In addition, one sanitized real Bedrock-backed smoke completed successfully;
-  this is not an extraction-accuracy, latency, throughput, or load evaluation.
-- Bedrock composition creates a fresh provider adapter per request so transient
-  diagnostic request data is not retained by the warm application.
-- The bounded regex redactor covers a demo subset of PII formats and is not a
-  complete production DLP system.
-- Evidence re-emission and human-review writes are idempotent, but the invoice
-  endpoint does not yet expose a caller run key for deduplicating command retries.
-- Cloud resources are deployed for controlled development; production readiness
-  is still not claimed.
+- No AWS resources are currently running; deploy the documented stacks in your
+  own account to reproduce the former live environment.
+- API-key authentication and the regex PII redactor are controlled-demo
+  boundaries, not enterprise identity or comprehensive DLP.
+- The included MCP integration is local; the AWS Lambda deployment uses the
+  in-memory business adapters and is not connected to a production finance system.
+- The real Bedrock smoke proved integration, not production-scale accuracy,
+  throughput, concurrency or resilience.
 
 See [`docs/PROOFLOOP_BUILD_AND_INTERVIEW_GUIDE.md`](docs/PROOFLOOP_BUILD_AND_INTERVIEW_GUIDE.md)
 for architecture decisions and production risks.
