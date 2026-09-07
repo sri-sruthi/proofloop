@@ -357,5 +357,4 @@ NAT/VPC cost.
   is still not claimed.
 
 See [`docs/PROOFLOOP_BUILD_AND_INTERVIEW_GUIDE.md`](docs/PROOFLOOP_BUILD_AND_INTERVIEW_GUIDE.md)
-for architecture decisions, beginner explanations, interview answers, test
-evidence, demo narration, and production risks.
+for architecture decisions and production risks.
